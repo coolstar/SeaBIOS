@@ -1,4 +1,5 @@
 # Kconfig SeaBIOS configuration
+# Copyright (C) 2013 Sage Electronic Engineering, LLC
 
 mainmenu "SeaBIOS Configuration"
 
@@ -207,7 +208,12 @@ menu "Hardware support"
         default y
         help
             Support floppy drive access.
-
+    config SD_MMC
+        depends on DRIVES
+        bool "SD/MMC controller"
+        default y
+        help
+            Support SD/MMC card access.
     config PS2PORT
         depends on KEYBOARD || MOUSE
         bool "PS/2 port"

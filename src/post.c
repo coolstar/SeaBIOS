@@ -2,6 +2,7 @@
 //
 // Copyright (C) 2008-2013  Kevin O'Connor <kevin@koconnor.net>
 // Copyright (C) 2002  MandrakeSoft S.A.
+// Copyright (C) 2013 Sage Electronic Engineering, LLC
 //
 // This file may be distributed under the terms of the GNU LGPLv3 license.
 
@@ -14,6 +15,7 @@
 #include "hw/ata.h" // ata_setup
 #include "hw/esp-scsi.h" // esp_scsi_setup
 #include "hw/lsi-scsi.h" // lsi_scsi_setup
+#include "hw/sd_if.h" // sd_setup
 #include "hw/megasas.h" // megasas_setup
 #include "hw/pvscsi.h" // pvscsi_setup
 #include "hw/pic.h" // pic_setup
@@ -143,6 +145,7 @@ device_hardware_setup(void)
     floppy_setup();
     ata_setup();
     ahci_setup();
+    sd_setup();
     cbfs_payload_setup();
     ramdisk_setup();
     virtio_blk_setup();

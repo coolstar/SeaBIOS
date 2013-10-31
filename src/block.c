@@ -2,6 +2,7 @@
 //
 // Copyright (C) 2008,2009  Kevin O'Connor <kevin@koconnor.net>
 // Copyright (C) 2002  MandrakeSoft S.A.
+// Copyright (C) 2013 Sage Electronic Engineering, LLC
 //
 // This file may be distributed under the terms of the GNU LGPLv3 license.
 
@@ -13,6 +14,7 @@
 #include "hw/pci.h" // pci_bdf_to_bus
 #include "hw/rtc.h" // rtc_read
 #include "hw/virtio-blk.h" // process_virtio_blk_op
+#include "hw/sd_if.h" // process_sd_op
 #include "malloc.h" // malloc_low
 #include "output.h" // dprintf
 #include "stacks.h" // stack_hop
@@ -20,9 +22,12 @@
 #include "string.h" // checksum
 #include "util.h" // process_floppy_op
 
+#define MAX_DRIVE_TYPES 4
+
 u8 FloppyCount VARFSEG;
 u8 CDCount;
-struct drive_s *IDMap[3][BUILD_MAX_EXTDRIVE] VARFSEG;
+
+struct drive_s *IDMap[MAX_DRIVE_TYPES][BUILD_MAX_EXTDRIVE] VARFSEG;
 u8 *bounce_buf_fl VARFSEG;
 
 struct drive_s *
@@ -277,6 +282,27 @@ map_floppy_drive(struct drive_s *drive)
     }
 }
 
+// Map a SD card
+void
+map_sd_drive(struct drive_s *drive_g)
+{
+    ASSERT32FLAT();
+    struct bios_data_area_s *bda = MAKE_FLATPTR(SEG_BDA, 0);
+    int sdid = bda->hdcount;
+    printf("Mapping sd/mmc drive 0x%08x\n", (unsigned int)drive_g);
+    add_drive(IDMap[EXTTYPE_HD], &bda->hdcount, drive_g);
+
+    // Setup disk geometry translation.
+    setup_translation(drive_g);
+
+    //@NOTE:  This step appears to be unnecessary for booting from the sd card as the pchs info does not get used...
+    drive_g->pchs.head = drive_g->lchs.head;
+    drive_g->pchs.cylinder = drive_g->lchs.cylinder;
+    drive_g->pchs.sector = drive_g->lchs.sector;
+
+    // Fill "fdpt" structure.
+    fill_fdpt(drive_g, sdid);
+}
 
 /****************************************************************
  * Extended Disk Drive (EDD) get drive parameters
@@ -503,60 +529,49 @@ int
 process_op(struct disk_op_s *op)
 {
     ASSERT16();
-    int ret, origcount = op->count;
     u8 type = GET_GLOBALFLAT(op->drive_gf->type);
     switch (type) {
     case DTYPE_FLOPPY:
-        ret = process_floppy_op(op);
-        break;
+        return process_floppy_op(op);
     case DTYPE_ATA:
-        ret = process_ata_op(op);
-        break;
+        return process_ata_op(op);
     case DTYPE_RAMDISK:
-        ret = process_ramdisk_op(op);
-        break;
+        return process_ramdisk_op(op);
     case DTYPE_CDEMU:
-        ret = process_cdemu_op(op);
-        break;
+        return process_cdemu_op(op);
     case DTYPE_VIRTIO_BLK:
-        ret = process_virtio_blk_op(op);
-        break;
+        return process_virtio_blk_op(op);
     case DTYPE_AHCI: ;
         extern void _cfunc32flat_process_ahci_op(void);
-        ret = call32(_cfunc32flat_process_ahci_op
-                     , (u32)MAKE_FLATPTR(GET_SEG(SS), op), DISK_RET_EPARAM);
-        break;
+        return call32(_cfunc32flat_process_ahci_op
+                      , (u32)MAKE_FLATPTR(GET_SEG(SS), op), DISK_RET_EPARAM);
     case DTYPE_ATA_ATAPI:
-        ret = process_atapi_op(op);
-        break;
+        return process_atapi_op(op);
     case DTYPE_AHCI_ATAPI: ;
         extern void _cfunc32flat_process_atapi_op(void);
-        ret = call32(_cfunc32flat_process_atapi_op
-                     , (u32)MAKE_FLATPTR(GET_SEG(SS), op), DISK_RET_EPARAM);
-        break;
+        return call32(_cfunc32flat_process_atapi_op
+                      , (u32)MAKE_FLATPTR(GET_SEG(SS), op), DISK_RET_EPARAM);
     case DTYPE_USB:
     case DTYPE_UAS:
     case DTYPE_VIRTIO_SCSI:
     case DTYPE_LSI_SCSI:
     case DTYPE_ESP_SCSI:
     case DTYPE_MEGASAS:
-        ret = process_scsi_op(op);
-        break;
+        return process_scsi_op(op);
     case DTYPE_USB_32:
     case DTYPE_UAS_32:
     case DTYPE_PVSCSI: ;
         extern void _cfunc32flat_process_scsi_op(void);
-        ret = call32(_cfunc32flat_process_scsi_op
+        return call32(_cfunc32flat_process_scsi_op
                      , (u32)MAKE_FLATPTR(GET_SEG(SS), op), DISK_RET_EPARAM);
-        break;
+    case DTYPE_SD: ;
+        extern void _cfunc32flat_process_sd_op(void);
+        return call32(_cfunc32flat_process_sd_op
+                      , (u32)MAKE_FLATPTR(GET_SEG(SS), op), DISK_RET_EPARAM);
     default:
-        ret = DISK_RET_EPARAM;
-        break;
-    }
-    if (ret && op->count == origcount)
-        // If the count hasn't changed on error, assume no data transferred.
         op->count = 0;
-    return ret;
+        return DISK_RET_EPARAM;
+    }
 }
 
 // Execute a "disk_op_s" request - this runs on the extra stack.

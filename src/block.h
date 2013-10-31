@@ -71,6 +71,7 @@ struct drive_s {
 #define DTYPE_ESP_SCSI     0x81
 #define DTYPE_MEGASAS      0x82
 #define DTYPE_PVSCSI       0x83
+#define DTYPE_SD           0x90
 
 #define MAXDESCSIZE 80
 
@@ -99,6 +100,7 @@ int getDriveId(u8 exttype, struct drive_s *drive);
 void map_floppy_drive(struct drive_s *drive);
 void map_hd_drive(struct drive_s *drive);
 void map_cd_drive(struct drive_s *drive);
+void map_sd_drive(struct drive_s *drive);
 struct int13dpt_s;
 int fill_edd(u16 seg, struct int13dpt_s *param_far, struct drive_s *drive_gf);
 int process_op(struct disk_op_s *op);

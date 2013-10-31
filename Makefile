@@ -1,6 +1,7 @@
 # SeaBIOS build system
 #
 # Copyright (C) 2008-2012  Kevin O'Connor <kevin@koconnor.net>
+# Copyright (C) 2014 Sage Electronic Engineering, LLC
 #
 # This file may be distributed under the terms of the GNU LGPLv3 license.
 
@@ -37,7 +38,8 @@ SRCBOTH=misc.c stacks.c output.c string.c block.c cdrom.c disk.c mouse.c kbd.c \
     hw/usb-hid.c hw/usb-msc.c hw/usb-uas.c \
     hw/blockcmd.c hw/floppy.c hw/ata.c hw/ramdisk.c \
     hw/virtio-ring.c hw/virtio-pci.c hw/virtio-blk.c hw/virtio-scsi.c \
-    hw/lsi-scsi.c hw/esp-scsi.c hw/megasas.c
+    hw/lsi-scsi.c hw/esp-scsi.c hw/megasas.c \
+    hw/sdhc_generic.c hw/sd.c hw/sd_if.c hw/sd_utils.c
 SRC16=$(SRCBOTH)
 SRC32FLAT=$(SRCBOTH) post.c memmap.c malloc.c romfile.c x86.c optionroms.c \
     pmm.c font.c boot.c bootsplash.c jpeg.c bmp.c \
