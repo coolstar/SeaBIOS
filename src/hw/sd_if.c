@@ -239,7 +239,7 @@ static void sd_scan(void) {
  */
 void sd_setup(void) {
     ASSERT32FLAT();
-    if (CONFIG_SD_MMC) {
+    if(CONFIG_SD) {
         dprintf(3, "init SD drives\n");
         sd_scan();
     }
@@ -369,7 +369,7 @@ int VISIBLE32FLAT process_sd_op(struct disk_op_s *op) {
     int ret = DISK_RET_EPARAM;
 
     // ensure the configuration exists
-    if (!CONFIG_SD_MMC)
+    if (!CONFIG_SD)
         return 0;
 
     dprintf(DEBUG_HDL_SD, "Executing SD disk transaction:  %d\r\n",

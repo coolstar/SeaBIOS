@@ -208,12 +208,15 @@ menu "Hardware support"
         default y
         help
             Support floppy drive access.
-    config SD_MMC
+    config SD
         depends on DRIVES
-        bool "SD/MMC controller"
-        default y
+        bool "SD controller"
+        default n
         help
-            Support SD/MMC card access.
+            Support SD card boot. This is a development feature.
+            Select this option ONLY if you know that your hardware
+            will support booting from SD card.
+            If unsure, say n.
     config PS2PORT
         depends on KEYBOARD || MOUSE
         bool "PS/2 port"
