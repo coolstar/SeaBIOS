@@ -106,22 +106,23 @@ static void sd_disk_init(sdif_t* sdif_p) {
  *
  * @param    sdif_t* sdif_p - Pointer to the SD disk interface structure
  *
- * @return   none
+ * @return   bool - True if the card was successfully initialized and prepared for boot
+ *                  false otherwise
  */
-static void sd_host_setup(sdif_t* sdif_p) {
+static bool sd_host_setup(sdif_t* sdif_p) {
+    bool status = false;
     // perform the SD card initialization sequence
-    sdhc_init(sdif_p->hostctrl_p);
-
-    // perform card identification process to complete the underlying card bus initialization
-    if (sdhc_is_initialized(sdif_p->hostctrl_p)) {
+    if (sdhc_init(sdif_p->hostctrl_p)) {
         // if the card passes initialization and goes to standby mode, it is ready for boot, so setup the disk info
         if (sd_card_bus_init(sdif_p->hostctrl_p)) {
             sd_disk_init(sdif_p);
 
             // the card is now enumerated, prepare it for boot (operational mode)
             sdhc_prep_boot(sdif_p->hostctrl_p);
+            status = true;
         }
     }
+    return status;
 }
 
 /**
@@ -142,7 +143,7 @@ static bool sd_card_detect(sdif_t* sdif_p) {
 
     // if the card is present, register it in the boot sequence
     if (status) {
-        sd_host_setup(sdif_p);
+        status = sd_host_setup(sdif_p);
     }
 
     return status;

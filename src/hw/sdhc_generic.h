@@ -64,7 +64,7 @@
 #include "config.h"
 #include "sd.h"
 
-void sdhc_init(sdhc_t* sd_ctrl_p);
+bool sdhc_init(sdhc_t* sd_ctrl_p);
 void sdhc_prep_boot(sdhc_t* sd_ctrl_p);
 bool sdhc_is_initialized(sdhc_t* sd_ctrl_p);
 

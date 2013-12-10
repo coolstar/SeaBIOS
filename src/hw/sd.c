@@ -285,7 +285,7 @@ static bool sd_send_if_cond(sdcard_t* card_p) {
      * NOTE: it should always be correct for SD cards, as there is really only one
      * voltage range currently supported as of 2013.  This may change in the future
      * though.  If this fails, the card is not an SD, SDHC, or SDXC card and the card
-     * is unusable.
+     * is unusable, or the host controller is not setup correctly for the card.
      */
     // set up a transaction structure
     memset(&xfer, 0, sizeof(sdxfer_t));
@@ -305,9 +305,12 @@ static bool sd_send_if_cond(sdcard_t* card_p) {
                 status = true;
                 break;
             }
+            usleep(100);
         }
     }
-
+    if(!status) {
+        dprintf( DEBUG_HDL_SD, "SD: card not present or not supported in the present operating conditions\n" );
+    }
     return status;
 }
 
@@ -373,7 +376,7 @@ static bool sd_send_op_cond(sdcard_t* card_p) {
 static bool sd_send_csd(sdcard_t* card_p) {
     bool status = false;
     sdxfer_t xfer;
-    uint32_t tries = SD_STATE_CHANGE_ATTEMPTS;
+    uint32_t tries = SD_TRY_AGAIN;
 
     memset(&xfer, 0, sizeof(sdxfer_t));
     xfer.cmd_idx = MMC_SEND_CSD_CMD9;
@@ -413,7 +416,7 @@ static bool sd_send_csd(sdcard_t* card_p) {
 static bool sd_all_send_cid(sdcard_t* card_p) {
     bool status = false;
     sdxfer_t xfer;
-    uint32_t tries = SD_STATE_CHANGE_ATTEMPTS;
+    uint32_t tries = SD_TRY_AGAIN;
 
     memset(&xfer, 0, sizeof(sdxfer_t));
     xfer.cmd_idx = MMC_ALL_SEND_CID_CMD2;
@@ -456,7 +459,7 @@ static bool sd_all_send_cid(sdcard_t* card_p) {
 static bool sd_send_relative_addr(sdcard_t* card_p) {
     bool status = false;
     sdxfer_t xfer;
-    uint32_t tries = SD_STATE_CHANGE_ATTEMPTS;
+    uint32_t tries = SD_TRY_AGAIN;
     sd_card_state_e current_state = invalid_e;
 
     memset(&xfer, 0, sizeof(sdxfer_t));

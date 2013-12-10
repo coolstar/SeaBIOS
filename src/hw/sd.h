@@ -203,6 +203,7 @@ typedef struct sdcard_t {
 #define SD_VOLTAGE_RANGE_270_360          0x00000100
 #define SD_IF_COND_ECHO                   0x000000AA
 #define SD_STATE_CHANGE_ATTEMPTS          1000
+#define SD_TRY_AGAIN                      10
 
 // ACMD41 bit shifts and masks
 #define OCR_DONE_BSY_N        (1 << 31)
@@ -285,7 +286,7 @@ typedef enum {
     invalid_e
 } sd_card_state_e;
 
-#define NUM_INIT_ATTEMPTS 5
+#define NUM_INIT_ATTEMPTS 2
 
 bool sd_card_bus_init(sdhc_t* host_ctrl_p);
 bool sd_read_single_block(sdcard_t* card_p, uint8_t* data_p, uint32_t addr);

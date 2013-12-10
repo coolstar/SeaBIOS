@@ -157,17 +157,28 @@ static bool sdhc_poll_intr_status(sdhc_t* sd_ctrl_p, sdxfer_t* xfer_p,
                     intr_flags);
             break;
         }
+        else if(reg32 & SDHCI_INT_ERROR_MASK) {
+            // notify debug of timeout error
+            if(reg32 & SDHCI_INT_TIMEOUT) {
+                dprintf(DEBUG_HDL_SD, "SD: ERROR Timeout\n");
+            }
+            // reset the card on fatal errors
+            else {
+                dprintf(DEBUG_HDL_SD,
+                    "SD: ERROR interrupt occured, clearing interrupt and resetting card\n");
+                    sdhc_reset( sd_ctrl_p, SDHCI_RESET_CMD | SDHCI_RESET_DATA );
+            }
+
+            bar_write32(sd_ctrl_p->bar_address, SDHCI_INT_STATUS, ~SDHCI_INT_ERROR_MASK);
+            status = false;
+            break;
+        }
+
         udelay(usec_tmo);
     }
     // in the case of errors, reset the card and clear out the error interrupts
     dprintf(DEBUG_HDL_SD, "SD: Current interrupt status register: 0x%08x\n", reg32);
-    if (reg32 & SDHCI_INT_ERROR_MASK) {
-        dprintf(DEBUG_HDL_SD,
-                "SD: ERROR interrupt occurred, clearing interrupt and resetting card\n");
-        sdhc_reset(sd_ctrl_p, SDHCI_RESET_CMD | SDHCI_RESET_DATA);
-        bar_write32(sd_ctrl_p->bar_address, SDHCI_INT_STATUS, ~SDHCI_INT_ERROR_MASK);
-        status = false;
-    }
+
     return status;
 }
 
@@ -207,7 +218,7 @@ static void sdhc_set_power(sdhc_t* sd_ctrl_p, uint32_t pwr_mode) {
 
     // turn off the power
     bar_write8(sd_ctrl_p->bar_address, SDHCI_POWER_CONTROL, pwr);
-    // if power down requested, let it
+
     if (pwr_mode == 0)
         return;
 
@@ -280,7 +291,7 @@ static void sdhc_set_clock(sdhc_t* sd_ctrl_p, uint32_t clk_val) {
 
     if (timeout > 0) {
         // clock is stable so enable the clock signal for the card bus
-        dprintf(DEBUG_HDL_SD, "SD: card internal clock stabilized at %u MHz\n",
+        dprintf(DEBUG_HDL_SD, "SD: card internal clock stabilized at %u Hz\n",
                 sd_ctrl_p->current_clk);
         clk |= SDHCI_CLOCK_CARD_EN;
         bar_write16(sd_ctrl_p->bar_address, SDHCI_CLOCK_CONTROL, clk);
@@ -376,7 +387,6 @@ static bool sdhc_cmd(sdhc_t* sd_ctrl_p, sdxfer_t* xfer_p) {
             mode &= ~( SDHCI_TRNS_MULTI | SDHCI_TRNS_DMA);
             bar_write16(sd_ctrl_p->bar_address, SDHCI_TRANSFER_MODE, mode);
         } else {
-
             // set data transfer mode for commanding
             mode = bar_read16(sd_ctrl_p->bar_address, SDHCI_TRANSFER_MODE);
             mode &= ~( SDHCI_TRNS_READ | SDHCI_TRNS_MULTI | SDHCI_TRNS_DMA);
@@ -519,7 +529,7 @@ bool sdhc_is_initialized(sdhc_t* sd_ctrl_p) {
  *
  * @return   bool - True if reset succeeded, false otherwise
  */
-void sdhc_init(sdhc_t* sd_ctrl_p) {
+bool sdhc_init(sdhc_t* sd_ctrl_p) {
     uint32_t reg32 = 0;
     uint8_t reg8 = 0;
 
@@ -551,7 +561,7 @@ void sdhc_init(sdhc_t* sd_ctrl_p) {
                 dprintf(DEBUG_HDL_SD, ": 1.8V\n");
             }
         } else {
-            dprintf(6, "SD: card is powered on\n");
+            dprintf(6, "SD: card bus is powered on\n");
         }
 
         // determine the base clock frequency reported by the card
@@ -665,5 +675,6 @@ void sdhc_init(sdhc_t* sd_ctrl_p) {
 
         sd_ctrl_p->is_initialized = true;
     }
+    return (sd_ctrl_p->is_initialized);
 }
 
