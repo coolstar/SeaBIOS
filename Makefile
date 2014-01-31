@@ -7,6 +7,9 @@
 # Output directory
 OUT=out/
 
+# Default config (can be overriden)
+KCONFIG_DEFCONFIG?=/dev/null
+
 # Common command definitions
 export HOSTCC             := $(CC)
 export CONFIG_SHELL       := sh
