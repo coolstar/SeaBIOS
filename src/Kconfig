@@ -211,7 +211,7 @@ menu "Hardware support"
     config SD
         depends on DRIVES
         bool "SD controller"
-        default n
+        default y
         help
             Support SD card boot. This is a development feature.
             Select this option ONLY if you know that your hardware
