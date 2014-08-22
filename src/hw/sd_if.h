@@ -73,6 +73,4 @@ typedef struct {
 void sd_setup(void);
 int sd_cmd_data(struct disk_op_s *op, void *cdbcmd, uint16_t blocksize);
 int process_sd_op(struct disk_op_s *op);
-void SD_DEBUG(const char* func, unsigned int line);
-#define SD_STOP( ) SD_DEBUG( __FUNCTION__, __LINE__ )
 #endif // __SD_IF_H

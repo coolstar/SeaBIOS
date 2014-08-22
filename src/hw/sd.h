@@ -64,11 +64,18 @@
 
 #include "sdhci.h"
 
-/** @brief sd host capabilities registers */
+/** @brief SD host capabilities registers */
 typedef struct {
     uint32_t cap1;
     uint32_t cap2;
 } capabilities_t;
+
+typedef enum {
+    removable_card_e = 0,
+    embedded_slot_e = 1,
+    shared_bus_e = 2,
+    rsvd_e = 3
+} sdslot_type_e;
 
 typedef enum {
     cmd_normal_e = SDHCI_CMD_TYPE_NORMAL,
@@ -85,7 +92,9 @@ typedef enum {
 } sdrsp_type_e;
 
 typedef enum {
-    sd_specv_1_00_e = 0, sd_specv_2_00_e, sd_specv_3_00_e
+    sd_specv_1_00_e = 0,
+    sd_specv_2_00_e,
+    sd_specv_3_00_e
 } sd_spec_ver_e;
 
 typedef enum {
@@ -133,11 +142,41 @@ typedef struct sdhc_t {
     bool is_initialized;
     uint8_t host_vendor_id;
     uint8_t host_spec_ver;
+    sdslot_type_e slot_type;
     sdcard_t* card_p;
 
     // call back to host for sending commands to the card via the host controller interface
     bool (*sdhc_cmd)(struct sdhc_t* sd_ctrl_p, sdxfer_t* xfer);
 } sdhc_t;
+
+/**
+ * SD Memory Card operational states
+ */
+typedef enum {
+    idle_e = 0,
+    ready_e,
+    ident_e,
+    stby_e,
+    tran_e,
+    data_e,
+    rcv_e,
+    prg_e,
+    dis_e,
+    invalid_e
+} sd_card_state_e;
+
+char *sd_state_names[16] = {
+        "Idle",
+        "Ready",
+        "Identification",
+        "Standby",
+        "Transfer",
+        "Data",
+        "Receive",
+        "Program",
+        "Disabled",
+        "Invalid"
+};
 
 /**
  * SD Memory Card Registers
@@ -155,6 +194,7 @@ typedef struct sdcard_t {
     sdreg_decode_t decode;
     bool hcxc_card;
     bool initialized;
+    sd_card_state_e state;
     bool is_selected;
 } sdcard_t;
 
@@ -200,9 +240,9 @@ typedef struct sdcard_t {
 #define SD_APP_SEND_SCR_CMD51             51
 
 // other useful defines
-#define SD_VOLTAGE_RANGE_270_360          0x00000100
-#define SD_IF_COND_ECHO                   0x000000AA
-#define SD_STATE_CHANGE_ATTEMPTS          1000
+#define SD_VOLTAGE_RANGE_270_360          (0x1 << 8)
+#define SD_IF_COND_ECHO                   0xAA
+#define SD_STATE_CHANGE_ATTEMPTS          100
 #define SD_TRY_AGAIN                      10
 
 // ACMD41 bit shifts and masks
@@ -273,22 +313,9 @@ typedef struct sdcard_t {
 
 #define RCAERROR_MSK    (RCASTATUS_COM_CRC_ERROR | RCASTATUS_ILLEGAL_COMMAND | RCASTATUS_ERROR)
 
-typedef enum {
-    idle_e = 0,
-    ready_e,
-    ident_e,
-    stby_e,
-    tran_e,
-    data_e,
-    rcv_e,
-    prg_e,
-    dis_e,
-    invalid_e
-} sd_card_state_e;
-
 #define NUM_INIT_ATTEMPTS 2
 
-bool sd_card_bus_init(sdhc_t* host_ctrl_p);
+bool sd_card_bus_init(sdhc_t* hostctrl_p);
 bool sd_read_single_block(sdcard_t* card_p, uint8_t* data_p, uint32_t addr);
 bool sd_read_multiple_block(sdcard_t* card_p);
 bool sd_stop_transmission(sdcard_t* card_p);

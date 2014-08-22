@@ -88,7 +88,7 @@ static uint32_t get_bits(uint32_t *bits, int bit_len, int start, int size) {
 void decode_cid_sd(uint32_t *raw_cid, sd_cid_t* cid) {
     int i;
 
-    // There's no version info, so we take it on faith
+    // there's no version info, so we take it on faith
     memset(cid, 0, sizeof(*cid));
     cid->mid = get_bits(raw_cid, 128, 120, 8);
     cid->oid = get_bits(raw_cid, 128, 104, 16);
@@ -102,84 +102,64 @@ void decode_cid_sd(uint32_t *raw_cid, sd_cid_t* cid) {
 }
 
 void decode_csd_sd(uint32_t *raw_csd, sd_csd_t* csd) {
-    int v;
     int m;
     int e;
-    int tst;
 
     memset(csd, 0, sizeof(*csd));
-    csd->csd_structure = v = get_bits(raw_csd, 128, 126, 2);
-    dprintf(DEBUG_HDL_SD, "CSD Register Info:\n");
-    if (v == 0) {
-        dprintf(DEBUG_HDL_SD, "  CSD Version 1.0\n");
-        m = get_bits(raw_csd, 128, 115, 4);
-        e = get_bits(raw_csd, 128, 112, 3);
+    csd->csd_structure = get_bits(raw_csd, 128, 126, 2);
+    csd->spec_vers = get_bits(raw_csd, 128, 122, 4);
+    m = get_bits(raw_csd, 128, 115, 4);
+    e = get_bits(raw_csd, 128, 112, 3);
+    csd->taac = (exp[e] * mant[m]) / 10;
+    csd->nsac = get_bits(raw_csd, 128, 104, 8) * 100;
+    m = get_bits(raw_csd, 128, 99, 4);
+    e = get_bits(raw_csd, 128, 96, 3);
+    csd->tran_speed = exp[e] * 10000 * mant[m];
+    csd->ccc = get_bits(raw_csd, 128, 84, 12);
+    csd->read_bl_len = 1 << get_bits(raw_csd, 128, 80, 4);
+    csd->read_bl_partial = get_bits(raw_csd, 128, 79, 1);
+    csd->write_blk_misalign = get_bits(raw_csd, 128, 78, 1);
+    csd->read_blk_misalign = get_bits(raw_csd, 128, 77, 1);
+    csd->dsr_imp = get_bits(raw_csd, 128, 76, 1);
+    csd->c_size = get_bits(raw_csd, 128, 62, 12);
+    csd->vdd_r_curr_min = cur_min[get_bits(raw_csd, 128, 59, 3)];
+    csd->vdd_r_curr_max = cur_max[get_bits(raw_csd, 128, 56, 3)];
+    csd->vdd_w_curr_min = cur_min[get_bits(raw_csd, 128, 53, 3)];
+    csd->vdd_w_curr_max = cur_max[get_bits(raw_csd, 128, 50, 3)];
+    csd->c_size_mult = get_bits(raw_csd, 128, 47, 3);
+    csd->erase_blk_en = get_bits(raw_csd, 128, 46, 1);
+    csd->erase_sector = get_bits(raw_csd, 128, 39, 7) + 1;
+    csd->wp_grp_size = get_bits(raw_csd, 128, 32, 5);
+    csd->wp_grp_enable = get_bits(raw_csd, 128, 31, 1);
+    csd->r2w_factor = 1 << get_bits(raw_csd, 128, 26, 3);
+    csd->write_bl_len = 1 << get_bits(raw_csd, 128, 22, 4);
+    csd->write_bl_partial = get_bits(raw_csd, 128, 21, 1);
 
-        tst = get_bits(raw_csd, 128, 112, 8);
-        dprintf(DEBUG_HDL_SD, "  RAW TAAC: 0x%02x\n", (uint8_t )tst);
-
-        csd->tacc = (exp[e] * mant[m] + 9) / 10;
-        csd->nsac = get_bits(raw_csd, 128, 104, 8) * 100;
-        m = get_bits(raw_csd, 128, 99, 4);
-        e = get_bits(raw_csd, 128, 96, 3);
-        csd->tran_speed = exp[e] * 10000 * mant[m];
-        csd->ccc = get_bits(raw_csd, 128, 84, 12);
-        csd->read_bl_len = 1 << get_bits(raw_csd, 128, 80, 4);
-        csd->read_bl_partial = get_bits(raw_csd, 128, 79, 1);
-        csd->write_blk_misalign = get_bits(raw_csd, 128, 78, 1);
-        csd->read_blk_misalign = get_bits(raw_csd, 128, 77, 1);
-        csd->dsr_imp = get_bits(raw_csd, 128, 76, 1);
-        csd->vdd_r_curr_min = cur_min[get_bits(raw_csd, 128, 59, 3)];
-        csd->vdd_r_curr_max = cur_max[get_bits(raw_csd, 128, 56, 3)];
-        csd->vdd_w_curr_min = cur_min[get_bits(raw_csd, 128, 53, 3)];
-        csd->vdd_w_curr_max = cur_max[get_bits(raw_csd, 128, 50, 3)];
+    // calculate the card capacity
+    switch (csd->csd_structure) {
+    case 0:
         m = get_bits(raw_csd, 128, 62, 12);
         e = get_bits(raw_csd, 128, 47, 3);
         csd->capacity = ((1 + m) << (e + 2)) * csd->read_bl_len;
-        csd->erase_blk_en = get_bits(raw_csd, 128, 46, 1);
-        csd->erase_sector = get_bits(raw_csd, 128, 39, 7) + 1;
-        csd->wp_grp_size = get_bits(raw_csd, 128, 32, 7);
-        csd->wp_grp_enable = get_bits(raw_csd, 128, 31, 1);
-        csd->r2w_factor = 1 << get_bits(raw_csd, 128, 26, 3);
-        csd->write_bl_len = 1 << get_bits(raw_csd, 128, 22, 4);
-        csd->write_bl_partial = get_bits(raw_csd, 128, 21, 1);
-    } else if (v == 1) {
-        dprintf(DEBUG_HDL_SD, "CSD Version 2.0\n");
-        m = get_bits(raw_csd, 128, 115, 4);
-        e = get_bits(raw_csd, 128, 112, 3);
-
-        tst = get_bits(raw_csd, 128, 112, 8);
-        dprintf(DEBUG_HDL_SD, "  RAW TAAC: 0x%02x\n", (uint8_t )tst);
-
-        csd->tacc = (exp[e] * mant[m] + 9) / 10;
-        csd->nsac = get_bits(raw_csd, 128, 104, 8) * 100;
-        m = get_bits(raw_csd, 128, 99, 4);
-        e = get_bits(raw_csd, 128, 96, 3);
-        csd->tran_speed = exp[e] * 10000 * mant[m];
-        csd->ccc = get_bits(raw_csd, 128, 84, 12);
-        csd->read_bl_len = 1 << get_bits(raw_csd, 128, 80, 4);
-        csd->read_bl_partial = get_bits(raw_csd, 128, 79, 1);
-        csd->write_blk_misalign = get_bits(raw_csd, 128, 78, 1);
-        csd->read_blk_misalign = get_bits(raw_csd, 128, 77, 1);
-        csd->dsr_imp = get_bits(raw_csd, 128, 76, 1);
+        break;
+    case 1:
+    case 2:
+    case 3:
+    case 4:
         csd->capacity = ((uint64_t) get_bits(raw_csd, 128, 48, 22) + 1) * 512
                 * 1024;
-        dprintf(DEBUG_HDL_SD, " C_SIZE: 0x%08x\n",
-                get_bits(raw_csd, 128, 48, 22));
-        csd->erase_blk_en = get_bits(raw_csd, 128, 46, 1);
-        csd->erase_sector = get_bits(raw_csd, 128, 39, 7) + 1;
-        csd->wp_grp_size = get_bits(raw_csd, 128, 32, 7);
-        csd->wp_grp_enable = get_bits(raw_csd, 128, 31, 1);
-        csd->r2w_factor = 1 << get_bits(raw_csd, 128, 26, 3);
-        csd->write_bl_len = 1 << get_bits(raw_csd, 128, 22, 4);
-        csd->write_bl_partial = get_bits(raw_csd, 128, 21, 1);
-    } else {
-        dprintf(DEBUG_HDL_SD, "unknown SD CSD version\n");
+        break;
+    default:
+        break;
     }
 
-    dprintf(DEBUG_HDL_SD, "  READ_BL_LEN: %d\n", csd->read_bl_len);
-
-    dprintf(DEBUG_HDL_SD, "  CAPACITY: 0x%08x%08x\n",
+    dprintf(DEBUG_HDL_SD, "CSD Register Info:\n");
+    dprintf(DEBUG_HDL_SD, "  - CSD Version %d.0\n", csd->csd_structure + 1);
+    dprintf(DEBUG_HDL_SD, "  - READ_BL_LEN: %d\n", csd->read_bl_len);
+    dprintf(DEBUG_HDL_SD, "  - CAPACITY: 0x%08x%08x\n",
             (uint32_t )(csd->capacity >> 32), (uint32_t )(csd->capacity));
+    dprintf(DEBUG_HDL_SD, "  - MAX FREQ: %d Hz\n", csd->tran_speed);
+    dprintf(DEBUG_HDL_SD, "  - TAAC: %dns\n", csd->taac);
+    dprintf(DEBUG_HDL_SD, "  - NSAC: %d clock cycles\n", csd->nsac);
 }
 

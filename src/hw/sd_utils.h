@@ -75,16 +75,19 @@ typedef struct {
     uint8_t fwrev;
 } sd_cid_t;
 
+// CSD -- decoded structure
 typedef struct {
     uint8_t csd_structure;
     uint8_t spec_vers;
     uint16_t ccc;
-    uint16_t tacc;
+    uint32_t taac;
     uint32_t nsac;
     uint32_t r2w_factor;
     uint32_t tran_speed;
     uint32_t read_bl_len;
     uint32_t write_bl_len;
+    uint16_t c_size;
+    uint8_t c_size_mult;
     uint32_t vdd_r_curr_min;
     uint32_t vdd_r_curr_max;
     uint32_t vdd_w_curr_min;

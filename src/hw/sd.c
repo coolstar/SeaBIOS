@@ -77,6 +77,8 @@ static bool sd_send_csd(sdcard_t* card_p);
 static bool sd_all_send_cid(sdcard_t* card_p);
 static bool sd_send_relative_addr(sdcard_t* card_p);
 static bool sd_card_identification_mode(sdcard_t* card_p);
+static bool sd_send_status(sdcard_t* card_p);
+static bool sd_set_blocklen(sdcard_t* card_p);
 
 /**
  * @brief     sd_host_xfer - Execute the host controller callback to perform
@@ -100,8 +102,8 @@ static bool sd_host_xfer(sdhc_t* host_p, sdxfer_t* xfer_p) {
         case rsp136_e:
             dprintf(DEBUG_HDL_SD,
                     "SD card: Response 136: 0x%08x, 0x%08x, 0x%08x, 0x%08x\n",
-                    xfer_p->response[0], xfer_p->response[1], xfer_p->response[2],
-                    xfer_p->response[3]);
+                    xfer_p->response[0], xfer_p->response[1],
+                    xfer_p->response[2], xfer_p->response[3]);
             break;
 
         case rsp48_e:
@@ -207,7 +209,19 @@ bool sd_read_single_block(sdcard_t* card_p, uint8_t* data_p, uint32_t addr) {
 
     if (!card_p->is_selected) {
         // select the card (CMD7)
-        sd_select_deselect_card(card_p);
+        if (!sd_select_deselect_card(card_p)) {
+            return status;
+        }
+    }
+
+    // set the block length (CMD16)
+    if (!sd_set_blocklen(card_p)) {
+        return status;
+    }
+
+    if (card_p->state != tran_e) {
+        // check that the card is in transfer state
+        sd_send_status(card_p);
     }
 
     // set up a transaction structure
@@ -285,7 +299,7 @@ static bool sd_send_if_cond(sdcard_t* card_p) {
      * NOTE: it should always be correct for SD cards, as there is really only one
      * voltage range currently supported as of 2013.  This may change in the future
      * though.  If this fails, the card is not an SD, SDHC, or SDXC card and the card
-     * is unusable, or the host controller is not setup correctly for the card.
+     * is unusable, or the host controller is not set up correctly for the card.
      */
     // set up a transaction structure
     memset(&xfer, 0, sizeof(sdxfer_t));
@@ -308,8 +322,9 @@ static bool sd_send_if_cond(sdcard_t* card_p) {
             usleep(100);
         }
     }
-    if(!status) {
-        dprintf( DEBUG_HDL_SD, "SD: card not present or not supported in the present operating conditions\n" );
+    if (!status) {
+        dprintf(DEBUG_HDL_SD,
+                "SD: Card not present or not supported in the present operating conditions\n");
     }
     return status;
 }
@@ -340,11 +355,11 @@ static bool sd_send_op_cond(sdcard_t* card_p) {
 
     // setup the voltages based on what is supported by the host
     xfer.arg1 |= card_p->host_p->capabilities.cap1 & SDHCI_CAN_VDD_180 ?
-                 VDD_S18A : 0;
+        VDD_S18A : 0;
     xfer.arg1 |= card_p->host_p->capabilities.cap1 & SDHCI_CAN_VDD_300 ?
-                 VDD_RANGE_27_30 : 0;
+        VDD_RANGE_27_30 : 0;
     xfer.arg1 |= card_p->host_p->capabilities.cap1 & SDHCI_CAN_VDD_330 ?
-                 VDD_RANGE_30_33 : 0;
+        VDD_RANGE_30_33 : 0;
 
     // normal SD cards ignore the HCS bit, so set it for HC/XC types
     xfer.arg1 |= HCS;
@@ -360,6 +375,7 @@ static bool sd_send_op_cond(sdcard_t* card_p) {
                 break;
             } else {
                 udelay(100);
+                status = false;
             }
         }
     }
@@ -489,7 +505,7 @@ static bool sd_send_relative_addr(sdcard_t* card_p) {
                     & RCASTATUS_CURRENT_STATE) >> 9);
             if (current_state == stby_e) {
                 dprintf(DEBUG_HDL_SD,
-                        "SD card: Current state is stby: 0x%02x - \n",
+                        "SD card: Current state is stby: 0x%02x\n",
                         current_state);
                 break;
             }
@@ -497,6 +513,93 @@ static bool sd_send_relative_addr(sdcard_t* card_p) {
     }
     return status;
 
+}
+
+/**
+ * @brief    sd_send_status - This function executes CMD13 - SEND_STATUS
+ *                 This command is executed with the RCA in the top 16 bits of arg1,
+ *                 0x0000 in the lower 15 bits, and HPI in the LSB (generally 0).
+ *
+ *                 This command expects response R1 (rsp48_e) with the current status
+ *                 of the card in the 32 bit Device Status register:
+ *                 [12:9]: Current State 0: Idle
+ *                                       1: Ready
+ *                                       2: Identification
+ *                                       3: Standby
+ *                                       4: Transfer
+ *                                       5: Data
+ *                                       6: Receive
+ *                                       7: Program
+ *                                       8: Disabled
+ *                                       9: Btst
+ *                                       10: Sleep
+ *                                       11 - 15: Reserved
+ *
+ * @param    sdcard_t* card_p - Pointer to the SD card abstraction structure
+ *
+ * @return   bool - True if successful, false otherwise
+ */
+static bool sd_send_status(sdcard_t* card_p) {
+    bool status = false;
+    sdxfer_t xfer;
+    uint32_t cycleTries = SD_TRY_AGAIN;
+    card_p->state = invalid_e;
+
+    memset(&xfer, 0, sizeof(sdxfer_t));
+    xfer.cmd_idx = MMC_SEND_STATUS_CMD13;
+    xfer.arg1 = card_p->rca << 16;
+    xfer.cmd_type = cmd_normal_e;
+    xfer.rsp_type = rsp48_e;
+    xfer.xfer_type = rdxfer_e;
+    xfer.data_p = NULL;
+    while (cycleTries--) {
+        status = sd_host_xfer(card_p->host_p, &xfer);
+        if (status) {
+            card_p->state = (sd_card_state_e)(
+                    (xfer.response[0] & RCASTATUS_CURRENT_STATE) >> 9);
+            dprintf(DEBUG_HDL_SD,
+                    "SD: Current status is 0x%08x (in %s state)\n",
+                    xfer.response[0], sd_state_names[card_p->state]);
+            break;
+        }
+    }
+    return status;
+
+}
+
+/**
+ * @brief    sd_set_blocklen - This function implements CMD16 SET_BLOCKLEN,
+ *                 which sets the block length (in bytes) for all following
+ *                 block commands.  The block length is specified in the CSD.
+ *
+ * @param    sdcard_t* card_p - Pointer to the SD card abstraction structure
+ *
+ * @return   bool - True if successful, false otherwise
+ */
+static bool sd_set_blocklen(sdcard_t* card_p) {
+    bool status = false;
+    sdxfer_t xfer;
+
+    // set up a transaction structure
+    memset(&xfer, 0, sizeof(sdxfer_t));
+    xfer.cmd_idx = MMC_SET_BLOCKLEN_CMD16;
+    xfer.arg1 = card_p->decode.csd_decode.read_bl_len;
+    xfer.cmd_type = cmd_normal_e;
+    xfer.rsp_type = rsp_none_e;
+    xfer.xfer_type = rdxfer_e;
+    xfer.data_p = NULL;
+
+    // invoke the host controller callback
+    status = sd_host_xfer(card_p->host_p, &xfer);
+    if (status)
+        dprintf(DEBUG_HDL_SD,
+                "SD: Successfully set blocklen to %d using CMD16\n",
+                card_p->decode.csd_decode.read_bl_len);
+    else
+        dprintf(DEBUG_HDL_SD, "SD: Could not set blocklen to %d using CMD16!\n",
+                card_p->decode.csd_decode.read_bl_len);
+
+    return status;
 }
 
 /**
@@ -514,6 +617,12 @@ static bool sd_card_identification_mode(sdcard_t* card_p) {
 
     ASSERT32FLAT();
     while (tries--) {
+        // Set Idle Mode with CMD0
+        if (!(status = sd_idle(card_p))) {
+            dprintf(DEBUG_HDL_SD, "SD: Could not reset card\n");
+            continue;
+        }
+
         // CMD8 - SEND_IF_COND
         if (!(status = sd_send_if_cond(card_p)))
             continue;
@@ -538,11 +647,15 @@ static bool sd_card_identification_mode(sdcard_t* card_p) {
         if (!(status = sd_send_csd(card_p)))
             continue;
 
+        // Send CMD13 w/ RCA to get status
+        sd_send_status(card_p);
+
         // the card will now be in standby state, and is ready for data transfers
         if (status == true) {
             dprintf(DEBUG_HDL_SD,
-                    "SD card: Initialization of SD card is complete:\n");
-            dprintf(DEBUG_HDL_SD, "  - currrent card state:  standby\n");
+                    "SD: Initialization of SD card is complete:\n");
+            dprintf(DEBUG_HDL_SD, "  - current card state:  %s\n",
+                    sd_state_names[card_p->state]);
             dprintf(DEBUG_HDL_SD, "  - RCA: 0x%04x\n", card_p->rca);
             dprintf(DEBUG_HDL_SD, "  - OCR: 0x%08x\n", card_p->ocr);
             dprintf(DEBUG_HDL_SD, "  - CID: 0x%08x, 0x%08x, 0x%08x, 0x%08x\n",
@@ -570,40 +683,31 @@ static bool sd_card_identification_mode(sdcard_t* card_p) {
  *                 4-1 of the "Physical Layer Simplified Specification Version 4.10" of the
  *                 SD card specification documents.
  *
- * @param    sdhc_t* host_ctrl_p - Pointer to the host controller structure
+ * @param    sdhc_t* hostctrl_p - Pointer to the host controller structure
  *
  * @return   bool - status, true = success, false = failure of the card bus initialization
  */
-bool sd_card_bus_init(sdhc_t* host_ctrl_p) {
-    bool status = false;
-
+bool sd_card_bus_init(sdhc_t* hostctrl_p) {
     // allocate the card
     sdcard_t* card_p = malloc_fseg(sizeof(sdcard_t));
     if (!card_p) {
         dprintf(DEBUG_HDL_SD, "SD: card failed to allocate\n");
-        return status;
+        return false;
     }
-    dprintf(DEBUG_HDL_SD, "SD:  card_p address: 0x%08x\n", (uint32_t )card_p);
 
     // set the host pointer
-    card_p->host_p = host_ctrl_p;
+    card_p->host_p = hostctrl_p;
 
-    // Set Idle Mode with CMD0
-    status = sd_idle(card_p);
-
-    if (status) {
-        // execute the initialization/identification procedure
-        card_p->initialized = sd_card_identification_mode(card_p);
-    }
+    // execute the initialization/identification procedure
+    card_p->initialized = sd_card_identification_mode(card_p);
 
     if (!card_p->initialized) {
         dprintf(DEBUG_HDL_SD, "SD: Card init failed, check card...\n");
-        status = card_p->initialized;
         free(card_p);
     } else {
         // If we get here, the card is in standby mode, so give a
         // reference to the host controller
-        host_ctrl_p->card_p = card_p;
+        hostctrl_p->card_p = card_p;
     }
-    return status;
+    return card_p->initialized;
 }

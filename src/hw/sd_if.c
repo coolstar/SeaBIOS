@@ -70,7 +70,8 @@ static int sd_disk_read(struct disk_op_s* op);
 static int sd_disk_read_aligned(struct disk_op_s* op);
 
 /**
- * @brief    sd_disk_init - Finalize the SeaBIOS drive initialization and register the drive
+ * @brief    sd_disk_init - Finalize the SeaBIOS drive initialization and
+ *                            register the drive
  *
  * @param    sdif_t* sdif_p - Pointer to SD disk interface structure
  *
@@ -79,17 +80,25 @@ static int sd_disk_read_aligned(struct disk_op_s* op);
 static void sd_disk_init(sdif_t* sdif_p) {
     sdif_p->drive.blksize = sdif_p->hostctrl_p->block_size;
     sdif_p->drive.type = DTYPE_SD;
-    sdif_p->drive.cntl_id = 0; // @TODO: Presently only one SD card is supported at a time!
+    sdif_p->drive.cntl_id = 0; // @TODO: Only one SD card is supported!
     sdif_p->drive.removable = false;
     sdif_p->drive.translation = TRANSLATION_LBA;
     // shift by 9 (divide by 512 block size)
-    sdif_p->drive.sectors = sdif_p->hostctrl_p->card_p->decode.csd_decode.capacity >> 9;
-    dprintf(DEBUG_HDL_SD, "SD: num sectors: %d\n",
-            (uint32_t )sdif_p->drive.sectors);
+    sdif_p->drive.sectors =
+            sdif_p->hostctrl_p->card_p->decode.csd_decode.capacity >> 9;
 
     // generate host vendor/spec string
-    sdif_p->desc = znprintf( MAXDESCSIZE, "SD Card Vendor ID: %d",
-            sdif_p->hostctrl_p->host_vendor_id);
+    sdif_p->desc = znprintf(MAXDESCSIZE,
+            "SD Card Vendor ID: %d %c%c%c%c%c%c Rev %d.%d",
+            sdif_p->hostctrl_p->host_vendor_id,
+            sdif_p->hostctrl_p->card_p->cid[0] & 0xff,
+            (sdif_p->hostctrl_p->card_p->cid[1] >> 24) & 0xff,
+            (sdif_p->hostctrl_p->card_p->cid[1] >> 16) & 0xff,
+            (sdif_p->hostctrl_p->card_p->cid[1] >> 8) & 0xff,
+            sdif_p->hostctrl_p->card_p->cid[1] & 0xff,
+            (sdif_p->hostctrl_p->card_p->cid[2] >> 24) & 0xff,
+            (sdif_p->hostctrl_p->card_p->cid[2] >> 20) & 0xf,
+            (sdif_p->hostctrl_p->card_p->cid[2] >> 16) & 0xf);
 
     sdif_p->boot_priority = bootprio_find_pci_device(
             (struct pci_device*) sdif_p->pci_p);
@@ -106,14 +115,15 @@ static void sd_disk_init(sdif_t* sdif_p) {
  *
  * @param    sdif_t* sdif_p - Pointer to the SD disk interface structure
  *
- * @return   bool - True if the card was successfully initialized and prepared for boot
- *                  false otherwise
+ * @return   bool - True if the card was successfully initialized and prepared
+ *                   for boot, false otherwise
  */
 static bool sd_host_setup(sdif_t* sdif_p) {
     bool status = false;
     // perform the SD card initialization sequence
     if (sdhc_init(sdif_p->hostctrl_p)) {
-        // if the card passes initialization and goes to standby mode, it is ready for boot, so setup the disk info
+        // if the card passes initialization and goes to standby mode, it is
+        // ready for boot, so setup the disk info
         if (sd_card_bus_init(sdif_p->hostctrl_p)) {
             sd_disk_init(sdif_p);
 
@@ -157,7 +167,9 @@ static bool sd_card_detect(sdif_t* sdif_p) {
  * @return   none
  */
 static void sd_config_setup(struct pci_device* pci) {
-    dprintf(6, "sd_config_setup: 0x%04x\n", pci->bdf);
+    dprintf(DEBUG_HDL_SD, "sd_config_setup on device %02x:%02x.%x \n",
+            pci_bdf_to_bus(pci->bdf), pci_bdf_to_dev(pci->bdf),
+            pci_bdf_to_fn(pci->bdf));
 
     // allocate the PCI to SD interface structure
     g_pdev = (sdif_t*) malloc_fseg(sizeof(*g_pdev));
@@ -212,7 +224,7 @@ static void sd_config_setup(struct pci_device* pci) {
  */
 static void sd_scan(void) {
     struct pci_device *pci = NULL;
-    dprintf(6, "SD: Scanning for SD Host controllers\n");
+    dprintf(DEBUG_HDL_SD, "SD: Scanning for SD Host controllers\n");
 
     // Scan PCI bus for SD/MMC host controllers
     foreachpci(pci)
@@ -224,7 +236,7 @@ static void sd_scan(void) {
         if (pci->prog_if != 1) {
             continue;
         }
-        dprintf(6, "Found PCI SDHCI controller\n");
+        dprintf(DEBUG_HDL_SD, "Found PCI SDHCI controller\n");
 
         // setup the SD host controller hardware
         sd_config_setup(pci);
@@ -240,7 +252,7 @@ static void sd_scan(void) {
  */
 void sd_setup(void) {
     ASSERT32FLAT();
-    if(CONFIG_SD) {
+    if (CONFIG_SD) {
         dprintf(3, "init SD drives\n");
         sd_scan();
     }
@@ -325,7 +337,7 @@ static int sd_disk_read(struct disk_op_s* op) {
 
     // check if the callers buffer is word aligned, if so use it directly
     if (((uint32_t) op->buf_fl & 1) == 0) {
-        dprintf(DEBUG_HDL_SD, "sd read: buffer already alligned\n");
+        dprintf(DEBUG_HDL_SD, "sd read: buffer already aligned\n");
         ret = sd_disk_read_aligned(op);
     } else {
         dprintf(DEBUG_HDL_SD,
@@ -361,9 +373,12 @@ static int sd_disk_read(struct disk_op_s* op) {
  *
  * @return   int - Disk return value from disk.h
  *
- * @NOTE:    The macro VISIBLE32FLAT is indicative of a call to 32 bit mode from 16-bit mode it forces the compiler
- *             to prepend the <function name> with <_cfunc32flat_><funciton name>, so in this case if you were to perform
- *             a search for the caller of process_sd_op, you may not find it unless you search for _cfunc32flat_process_sd_op
+ * @NOTE:    The macro VISIBLE32FLAT is indicative of a call to 32 bit mode
+ *             from 16-bit mode it forces the compiler to prepend the
+ *             <function name> with <_cfunc32flat_><function name>, so in
+ *             this case if you were to perform a search for the caller of
+ *             process_sd_op, you may not find it unless you search for
+ *             _cfunc32flat_process_sd_op
  */
 
 int VISIBLE32FLAT process_sd_op(struct disk_op_s *op) {

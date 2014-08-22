@@ -28,6 +28,13 @@
  */
 
 /*
+ * Version definitions
+ */
+#define SDHCI_SPEC_100    0
+#define SDHCI_SPEC_200    1
+#define SDHCI_SPEC_300    2
+
+/*
  * PCI registers
  */
 #define PCI_SDHCI_IFPIO            0x00
@@ -109,6 +116,7 @@
 #define  SDHCI_CTRL_SDMA    0x08
 #define  SDHCI_CTRL_ADMA2    0x10
 #define  SDHCI_CTRL_ADMA264    0x18
+#define  SDHCI_CTRL_8BITBUS    0x020
 #define  SDHCI_CTRL_CARD_DET    0x40
 #define  SDHCI_CTRL_FORCE_CARD    0x80
 
@@ -123,7 +131,12 @@
 #define SDHCI_WAKE_UP_CONTROL    0x2B
 
 #define SDHCI_CLOCK_CONTROL    0x2C
-#define  SDHCI_DIVIDER_SHIFT    8
+#define  SDHCI_MAX_DIV    256
+#define  SDHCI_V3_MAX_DIV    2046
+#define  SDHCI_DIVIDER_MASK    0xFF    // V2.00 has 8 bit divider
+#define  SDHCI_DIVIDER_EXT_MASK    0x300    // V3.00 has 10 bit divider
+#define  SDHCI_DIVIDER_SHIFT    8    // Low 8 bits of divider live in register bits 15-8
+#define  SDHCI_DIVIDER_EXT_SHIFT    6    // V3.00 has high 2 bits of divider in register bits 6-7
 #define  SDHCI_CLOCK_CARD_EN    0x0004
 #define  SDHCI_CLOCK_INT_STABLE    0x0002
 #define  SDHCI_CLOCK_INT_EN    0x0001
@@ -176,9 +189,11 @@
 #define  SDHCI_TIMEOUT_CLK_SHIFT 0
 #define  SDHCI_TIMEOUT_CLK_UNIT    0x00000080
 #define  SDHCI_CLOCK_BASE_MASK    0x00003F00
+#define  SDHCI_V3_CLOCK_BASE_MASK    0x0000FF00
 #define  SDHCI_CLOCK_BASE_SHIFT    8
 #define  SDHCI_MAX_BLOCK_MASK    0x00030000
 #define  SDHCI_MAX_BLOCK_SHIFT  16
+#define  SDHCI_8BIT_SUPPORT    0x00040000
 #define  SDHCI_CAN_DO_ADMA2    0x00080000
 #define  SDHCI_CAN_DO_HISPD    0x00200000
 #define  SDHCI_CAN_DO_DMA    0x00400000
@@ -187,6 +202,8 @@
 #define  SDHCI_CAN_VDD_300    0x02000000
 #define  SDHCI_CAN_VDD_180    0x04000000
 #define  SDHCI_CAN_DO_64BIT    0x10000000
+#define  SDHCI_SLOT_TYPE_MASK    0xC0000000
+#define  SDHCI_SLOT_TYPE_SHIFT   30
 
 #define SDHCI_MAX_CURRENT    0x48
 
