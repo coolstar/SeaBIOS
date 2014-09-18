@@ -118,8 +118,8 @@ static void sd_disk_init(sdif_t* sdif_p) {
     dprintf(DEBUG_HDL_SD, "SD card boot priority: 0x%08x\n",
             sdif_p->boot_priority);
 
-    // register the device as a hard disk
-    boot_add_hd(&sdif_p->drive, sdif_p->desc, (int) sdif_p->boot_priority);
+    // register the device as an SD/MMC drive
+    boot_add_sd(&sdif_p->drive, sdif_p->desc, (int) sdif_p->boot_priority);
 }
 
 /**

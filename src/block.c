@@ -162,11 +162,12 @@ setup_translation(struct drive_s *drive)
     // clip to 1024 cylinders in lchs
     if (cylinders > 1024)
         cylinders = 1024;
-    dprintf(1, "drive %p: PCHS=%u/%d/%d translation=%s LCHS=%d/%d/%d s=%d\n"
+    dprintf(1, "drive %p: PCHS=%u/%d/%d translation=%s LCHS=%d/%d/%d s=%08x%08x\n"
             , drive
             , drive->pchs.cylinder, drive->pchs.head, drive->pchs.sector
             , desc
             , cylinders, heads, spt
+            , (u32)(sectors >> 32)
             , (u32)sectors);
 
     drive->lchs.head = heads;
@@ -284,24 +285,19 @@ map_floppy_drive(struct drive_s *drive)
 
 // Map a SD card
 void
-map_sd_drive(struct drive_s *drive_g)
+map_sd_drive(struct drive_s *drive)
 {
     ASSERT32FLAT();
     struct bios_data_area_s *bda = MAKE_FLATPTR(SEG_BDA, 0);
     int sdid = bda->hdcount;
-    printf("Mapping sd/mmc drive 0x%08x\n", (unsigned int)drive_g);
-    add_drive(IDMap[EXTTYPE_HD], &bda->hdcount, drive_g);
+    dprintf(3, "Mapping sd/mmc drive %p to %d\n", drive, sdid);
+    add_drive(IDMap[EXTTYPE_HD], &bda->hdcount, drive);
 
     // Setup disk geometry translation.
-    setup_translation(drive_g);
-
-    //@NOTE:  This step appears to be unnecessary for booting from the sd card as the pchs info does not get used...
-    drive_g->pchs.head = drive_g->lchs.head;
-    drive_g->pchs.cylinder = drive_g->lchs.cylinder;
-    drive_g->pchs.sector = drive_g->lchs.sector;
+    setup_translation(drive);
 
     // Fill "fdpt" structure.
-    fill_fdpt(drive_g, sdid);
+    fill_fdpt(drive, sdid);
 }
 
 /****************************************************************
