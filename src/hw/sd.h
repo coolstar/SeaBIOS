@@ -187,6 +187,7 @@ typedef struct sdcard_t {
     uint16_t rca;
     uint16_t dsr;
     uint32_t csd[4];
+    uint32_t ext_csd[128];
     uint32_t scr[2];
     uint32_t ocr;
     uint32_t ssr[16];
@@ -242,7 +243,7 @@ typedef struct sdcard_t {
 // other useful defines
 #define SD_VOLTAGE_RANGE_270_360          (0x1 << 8)
 #define SD_IF_COND_ECHO                   0xAA
-#define SD_STATE_CHANGE_ATTEMPTS          100
+#define SD_STATE_CHANGE_ATTEMPTS          1000
 #define SD_TRY_AGAIN                      10
 
 // ACMD41 bit shifts and masks
@@ -257,6 +258,7 @@ typedef struct sdcard_t {
 #define OCR  (0xFF << OCR_SHIFT)
 
 // OCR register voltage ranges
+#define VDD_17_19    (1 << 7)
 #define VDD_27_28    (1 << 15)
 #define VDD_28_29    (1 << 16)
 #define VDD_29_30    (1 << 17)
@@ -268,12 +270,11 @@ typedef struct sdcard_t {
 #define VDD_35_36    (1 << 23)
 #define VDD_S18A     (1 << 24)
 
-#define VDD_MASK        ( VDD_27_28 | VDD_28_29 | VDD_29_30 | \
-                          VDD_30_31 | VDD_31_32 | VDD_32_33 | \
-                          VDD 33_34 | VDD_34_35 | VDD_35_36 )
 #define VDD_RANGE_27_30 ( VDD_27_28 | VDD_28_29 | VDD_29_30 )
 #define VDD_RANGE_30_33 ( VDD_30_31 | VDD_31_32 | VDD_32_33 )
 #define VDD_RANGE_33_36 ( VDD 33_34 | VDD_34_35 | VDD_35_36 )
+#define VDD_MASK        ( VDD_RANGE_27_30 | VDD_RANGE_30_33 | VDD_RANGE_33_36 )
+#define MMC_VOLTAGE_MASK ( VDD_17_19 | VDD_RANGE_27_30 | VDD_RANGE_30_33 | VDD_RANGE_33_36 )
 
 #define CARD_UHS_II_STATUS          (1 << 29)
 #define CARD_CAPACITY_STATUS        (1 << 30)
@@ -319,5 +320,8 @@ bool sd_card_bus_init(sdhc_t* hostctrl_p);
 bool sd_read_single_block(sdcard_t* card_p, uint8_t* data_p, uint32_t addr);
 bool sd_read_multiple_block(sdcard_t* card_p);
 bool sd_stop_transmission(sdcard_t* card_p);
+bool sd_idle(sdcard_t* card_p);
+bool sd_select_deselect_card(sdcard_t* card_p);
+bool sd_host_xfer(sdhc_t* host_p, sdxfer_t* pxfer_t);
 
 #endif // __SD_H

@@ -72,7 +72,6 @@ static bool sdhc_poll_intr_status(sdhc_t* sd_ctrl_p, sdxfer_t* xfer_p,
 static void sdhc_get_ver_info(sdhc_t* sd_ctrl_p);
 static void sdhc_set_clock(sdhc_t* sd_ctrl_p, uint32_t clk_val);
 static void sdhc_set_power(sdhc_t* sd_ctrl_p, uint32_t pwr_mode);
-static bool sdhc_reset(sdhc_t* sd_ctrl_p, uint8_t reset_flags);
 static void sdhc_read_block(sdhc_t* sd_ctrl_p, uint8_t* buf_p, uint32_t count);
 
 // callback function for performing command/response transactions
@@ -348,7 +347,7 @@ static void sdhc_set_clock(sdhc_t* sd_ctrl_p, uint32_t clk_val) {
  *
  * @return   bool - True if the request did not timeout, false otherwise
  */
-static bool sdhc_reset(sdhc_t* sd_ctrl_p, uint8_t reset_flags) {
+bool sdhc_reset(sdhc_t* sd_ctrl_p, uint8_t reset_flags) {
     uint8_t resetResult = 0;
     uint32_t timeout = 0;
     bool status = false;

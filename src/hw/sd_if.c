@@ -87,18 +87,31 @@ static void sd_disk_init(sdif_t* sdif_p) {
     sdif_p->drive.sectors =
             sdif_p->hostctrl_p->card_p->decode.csd_decode.capacity >> 9;
 
-    // generate host vendor/spec string
-    sdif_p->desc = znprintf(MAXDESCSIZE,
-            "SD Card Vendor ID: %d %c%c%c%c%c%c Rev %d.%d",
-            sdif_p->hostctrl_p->host_vendor_id,
-            sdif_p->hostctrl_p->card_p->cid[0] & 0xff,
-            (sdif_p->hostctrl_p->card_p->cid[1] >> 24) & 0xff,
-            (sdif_p->hostctrl_p->card_p->cid[1] >> 16) & 0xff,
-            (sdif_p->hostctrl_p->card_p->cid[1] >> 8) & 0xff,
-            sdif_p->hostctrl_p->card_p->cid[1] & 0xff,
-            (sdif_p->hostctrl_p->card_p->cid[2] >> 24) & 0xff,
-            (sdif_p->hostctrl_p->card_p->cid[2] >> 20) & 0xf,
-            (sdif_p->hostctrl_p->card_p->cid[2] >> 16) & 0xf);
+    if(sdif_p->hostctrl_p->slot_type == removable_card_e) {
+        // generate host vendor/spec string
+        sdif_p->desc = znprintf(MAXDESCSIZE,
+                              "SD Card Vendor ID: %d %c%c%c%c%c Rev %d.%d",
+                              sdif_p->hostctrl_p->host_vendor_id,
+                              sdif_p->hostctrl_p->card_p->cid[0] & 0xff,
+                              (sdif_p->hostctrl_p->card_p->cid[1] >> 24) & 0xff,
+                              (sdif_p->hostctrl_p->card_p->cid[1] >> 16) & 0xff,
+                              (sdif_p->hostctrl_p->card_p->cid[1] >> 8 ) & 0xff,
+                              sdif_p->hostctrl_p->card_p->cid[1] & 0xff,
+                              (sdif_p->hostctrl_p->card_p->cid[2] >> 20) & 0xf,
+                              (sdif_p->hostctrl_p->card_p->cid[2] >> 16) & 0xf);
+    } else {
+        sdif_p->desc = znprintf(MAXDESCSIZE,
+                              "MMC Vendor ID: %d %c%c%c%c%c%c Rev %d.%d",
+                              sdif_p->hostctrl_p->host_vendor_id,
+                              sdif_p->hostctrl_p->card_p->cid[0] & 0xff,
+                              (sdif_p->hostctrl_p->card_p->cid[1] >> 24) & 0xff,
+                              (sdif_p->hostctrl_p->card_p->cid[1] >> 16) & 0xff,
+                              (sdif_p->hostctrl_p->card_p->cid[1] >> 8 ) & 0xff,
+                              sdif_p->hostctrl_p->card_p->cid[1] & 0xff,
+                              (sdif_p->hostctrl_p->card_p->cid[2] >> 24) & 0xff,
+                              (sdif_p->hostctrl_p->card_p->cid[2] >> 20) & 0xf,
+                              (sdif_p->hostctrl_p->card_p->cid[2] >> 16) & 0xf);
+    }
 
     sdif_p->boot_priority = bootprio_find_pci_device(
             (struct pci_device*) sdif_p->pci_p);

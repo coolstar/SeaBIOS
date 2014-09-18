@@ -61,16 +61,13 @@
 #include "output.h"
 #include "config.h"
 #include "sd.h"
+#include "mmc.h"
+#include "sdhc_generic.h"
 
 // Host controller access functions CMD/DATA and ACMD
-static bool sd_host_xfer(sdhc_t* host_p, sdxfer_t* xfer_p);
 static bool sd_app_specific_host_xfer(sdhc_t* host_p, sdxfer_t* xfer_p);
 
-// Card control functions
-static bool sd_select_deselect_card(sdcard_t* card_p);
-
 // Card initialization functions
-static bool sd_idle(sdcard_t* card_p);
 static bool sd_send_if_cond(sdcard_t* card_p);
 static bool sd_send_op_cond(sdcard_t* card_p);
 static bool sd_send_csd(sdcard_t* card_p);
@@ -90,7 +87,7 @@ static bool sd_set_blocklen(sdcard_t* card_p);
  *
  * @return    bool - True if successful, false otherwise
  */
-static bool sd_host_xfer(sdhc_t* host_p, sdxfer_t* xfer_p) {
+bool sd_host_xfer(sdhc_t* host_p, sdxfer_t* xfer_p) {
     bool status = false;
 
     dprintf(DEBUG_HDL_SD, "SD card: Sending CMD%u with arg1 0x%08x\n",
@@ -171,7 +168,7 @@ static bool sd_app_specific_host_xfer(sdhc_t* host_p, sdxfer_t* xfer_p) {
  *
  * @return   bool - True if successful, false otherwise
  */
-static bool sd_select_deselect_card(sdcard_t* card_p) {
+bool sd_select_deselect_card(sdcard_t* card_p) {
     bool status = false;
     sdxfer_t xfer;
 
@@ -188,7 +185,14 @@ static bool sd_select_deselect_card(sdcard_t* card_p) {
     status = sd_host_xfer(card_p->host_p, &xfer);
 
     if (status) {
+        dprintf( DEBUG_HDL_SD,
+                "SD: Successfully selected the card with RCA %02x using CMD7!\n",
+                card_p->rca );
         card_p->is_selected = card_p->is_selected == true ? false : true;
+    } else {
+        dprintf( DEBUG_HDL_SD,
+                "SD: Error: Could not select the card with RCA %02x using CMD7\n",
+                card_p->rca );
     }
 
     return status;
@@ -221,7 +225,8 @@ bool sd_read_single_block(sdcard_t* card_p, uint8_t* data_p, uint32_t addr) {
 
     if (card_p->state != tran_e) {
         // check that the card is in transfer state
-        sd_send_status(card_p);
+        if (!sd_send_status(card_p))
+            return status;
     }
 
     // set up a transaction structure
@@ -261,7 +266,7 @@ bool sd_stop_transmission(sdcard_t* card_p) {
  *
  * @return   bool - true if successful, false otherwise
  */
-static bool sd_idle(sdcard_t* card_p) {
+bool sd_idle(sdcard_t* card_p) {
     bool status = false;
     sdxfer_t xfer;
 
@@ -585,7 +590,7 @@ static bool sd_set_blocklen(sdcard_t* card_p) {
     xfer.cmd_idx = MMC_SET_BLOCKLEN_CMD16;
     xfer.arg1 = card_p->decode.csd_decode.read_bl_len;
     xfer.cmd_type = cmd_normal_e;
-    xfer.rsp_type = rsp_none_e;
+    xfer.rsp_type = rsp48_e;
     xfer.xfer_type = rdxfer_e;
     xfer.data_p = NULL;
 
@@ -614,34 +619,55 @@ static bool sd_set_blocklen(sdcard_t* card_p) {
 static bool sd_card_identification_mode(sdcard_t* card_p) {
     bool status = false;
     uint32_t tries = NUM_INIT_ATTEMPTS;
+    uint32_t card_type = card_p->host_p->slot_type;
 
     ASSERT32FLAT();
     while (tries--) {
         // Set Idle Mode with CMD0
         if (!(status = sd_idle(card_p))) {
-            dprintf(DEBUG_HDL_SD, "SD: Could not reset card\n");
+            dprintf(DEBUG_HDL_SD, "SD: Could not put card into IDLE state\n");
             continue;
         }
 
         // CMD8 - SEND_IF_COND
-        if (!(status = sd_send_if_cond(card_p)))
-            continue;
+        if (card_type == removable_card_e) {
+            if (!(status = sd_send_if_cond(card_p))) {
+                dprintf(DEBUG_HDL_SD, "SD: Could not get Interface Conditions for this card\n");
+                continue;
+            }
 
-        // ACMD41 - SEND_OP_COND to properly initialize SDHC and SDXC cards...
-        if (!(status = sd_send_op_cond(card_p)))
-            continue;
+            // SEND_OP_COND - SD: ACMD41, MMC: CMD1
+            dprintf(DEBUG_HDL_SD, "SD: Init SD card, send ACMD41\n");
+            if (!(status = sd_send_op_cond(card_p))) {
+                dprintf(DEBUG_HDL_SD, "No SD card found\n");
+                continue;
+            }
+        } else if (card_type == embedded_slot_e) {
+            dprintf(DEBUG_HDL_SD, "MMC: Init MMC card, send CMD1\n");
+            if(!(status = mmc_send_op_cond(card_p))) {
+                dprintf(DEBUG_HDL_SD, "No MMC card found\n");
+                continue;
+            }
+        }
 
-        // If the voltage needs to change based on the response for ACMD41, change it using CMD11
-        // @TODO: implement CMD11 voltage switch if necessary... probably don't need to support this
-        // for a while
+        // If the voltage needs to change based on the response for ACMD41,
+    	// change it using CMD11
+        // @TODO: implement CMD11 voltage switch if necessary...
+    	// probably don't need to support this for a while
 
-        // Else Send CMD2 to get the CID, the card should be in identification state
+        // Send CMD2 to get the CID, the card should be in identification state
         if (!(status = sd_all_send_cid(card_p)))
             continue;
 
-        // Send CMD3 to get the relative card address (RCA) used for broad cast commands
-        if (!(status = sd_send_relative_addr(card_p)))
-            continue;
+        // CMD3 - SD: send_relative_card_address, MMC: set_relative_card_address
+        //        Get or set the Relative Card Address (RCA) used for broadcast commands
+        if (card_type == removable_card_e) {
+            if(!(status = sd_send_relative_addr(card_p)))
+                continue;
+        } else if (card_type == embedded_slot_e) {
+            if (!(status = mmc_set_relative_addr(card_p)))
+                continue;
+        }
 
         // Send CMD9 to get the CSD register info
         if (!(status = sd_send_csd(card_p)))
@@ -649,6 +675,11 @@ static bool sd_card_identification_mode(sdcard_t* card_p) {
 
         // Send CMD13 w/ RCA to get status
         sd_send_status(card_p);
+
+        // Send CMD8 w/ RCA to get Extended CSD
+        if (card_type == embedded_slot_e) {
+            mmc_send_ext_csd(card_p);
+        }
 
         // the card will now be in standby state, and is ready for data transfers
         if (status == true) {

@@ -1,6 +1,9 @@
 /*-
- * Copyright (c) 2012 - 2014 Sage Electronic Engineering.  All rights reserved.
+ * Copyright (c) 2006 Bernd Walter.  All rights reserved.
+ * Copyright (c) 2006 M. Warner Losh.  All rights reserved.
+ * Copyright (c) 2014 Sage Electronic Engineering.  All rights reserved.
  *
+ * Originated from FreeBSD source file source/dev/mmc/mmc.c
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -50,23 +53,11 @@
  * information, know-how or other confidential information to any third party.
  */
 
-#ifndef __SDHC_GENERIC_H
-#define __SDHC_GENERIC_H
+#define MMC_SEND_OP_COND_CMD1   1
+#define MMC_OCR_VOLTAGE_MASK    0x00ff8080
+#define MMC_OCR_ACCESS_MODE	    0x40000000
 
-/** @file sdhc_generic.h */
-/*
- * @brief SD PCI host controller driver header file.  This driver is intended
- *           to be a generic driver for use with booting from SD cards. It
- *           only supports the minimum controls necessary to boot.
- */
-#include <stdint.h>
-#include "block.h"
-#include "config.h"
-#include "sd.h"
+bool mmc_send_op_cond(sdcard_t* card_p);
+bool mmc_send_ext_csd(sdcard_t* card_p);
+bool mmc_set_relative_addr(sdcard_t* card_p);
 
-bool sdhc_init(sdhc_t* sd_ctrl_p);
-void sdhc_prep_boot(sdhc_t* sd_ctrl_p);
-bool sdhc_is_initialized(sdhc_t* sd_ctrl_p);
-bool sdhc_reset(sdhc_t* sd_ctrl_p, uint8_t reset_flags);
-
-#endif /* __SDHC_GENERIC_H */
