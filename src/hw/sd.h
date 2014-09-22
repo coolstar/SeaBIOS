@@ -122,6 +122,7 @@ typedef struct {
 typedef struct {
     sd_cid_t cid_decode;
     sd_csd_t csd_decode;
+    ext_csd_t ext_csd_decode;
 } sdreg_decode_t;
 
 // resolve forward declarations
@@ -270,12 +271,124 @@ typedef struct sdcard_t {
 #define VDD_35_36    (1 << 23)
 #define VDD_S18A     (1 << 24)
 
+// Ext CSD bit fields
+#define EXT_CSD_SIZE	512
+
+#define MIN_PERF_DDR_W    235
+#define MIN_PERF_DDR_R    234
+#define MIN_PERF_W_8_52    210
+#define MIN_PERF_R_8_52    209
+#define MIN_PERF_W_8_26_4_52    208
+#define MIN_PERF_R_8_26_4_52    207
+#define MIN_PERF_W_4_26    206
+#define MIN_PERF_R_4_26    205
+
+// Speed classes - MB/S = (CLASS * 2 * 150) (* 2 for DDR)
+#define   MMC_CLASS_NONE    0
+#define   MMC_CLASS_A    0x8
+#define   MMC_CLASS_B    0xA
+#define   MMC_CLASS_C    0xF
+#define   MMC_CLASS_D    0x14
+#define   MMC_CLASS_E    0x1E
+#define   MMC_CLASS_F    0x28
+#define   MMC_CLASS_G    0x32
+#define   MMC_CLASS_H    0x3C
+#define   MMC_CLASS_J    0x46
+#define   MMC_CLASS_K    0x50
+#define   MMC_CLASS_M    0x64
+#define   MMC_CLASS_O    0x78
+#define   MMC_CLASS_R    0x8C
+#define   MMC_CLASS_T    0xA0
+
+#define SEC_COUNT    212
+
+#define DEVICE_TYPE    196
+#define   HS200_SDR_12V    (1 << 5)
+#define   HS200_SDR_18V    (1 << 4)
+#define   HS52_DDR_12V    (1 << 3)
+#define   HS52_DDR_18V    (1 << 2)
+#define   HS52_STANDARD    (1 << 1)
+#define   HS26_STANDARD    (1 << 0)
+
+#define EXT_CSD_STRUCTURE    194
+#define   CSD_VNO12    2
+#define   CSD_VNO11    1
+#define   CSD_VNO10    0
+
+#define EXT_CSD_REV    192
+#define   MMC_V45_451    6
+#define   MMC_V441    5
+#define   MMC_V43    3
+#define   MMC_V42    2
+#define   MMC_V41    1
+#define   MMC_V40    0
+
+#define CMD_SET    191
+
+#define CMD_SET_REV    189
+#define   CMD_SET_V40    0
+
+#define POWER_CLASS    187
+
+#define HS_TIMING    185
+#define   HS_TIMING_COMPATIBILITY    0
+#define   HS_TIMING_HIGH_SPEED    1
+#define   HS_TIMING_HS200    2
+
+#define BUS_WIDTH    183
+#define   DDR_8BIT    6
+#define   DDR_4bit    5
+#define   SDR_8BIT    2
+#define   SDR_4BIT    1
+#define   SDR_1BIT    0
+
+/**
+ * SD/MMC Speed Classes
+ */
+const char* sdMmcClassStr[] = {
+        [MMC_CLASS_NONE] = "No Class",
+        [MMC_CLASS_A] = "Class A",
+        [MMC_CLASS_B] = "Class B",
+        [MMC_CLASS_C] = "Class C",
+        [MMC_CLASS_D] = "Class D",
+        [MMC_CLASS_E] = "Class E",
+        [MMC_CLASS_F] = "Class F",
+        [MMC_CLASS_G] = "Class G",
+        [MMC_CLASS_H] = "Class H",
+        [MMC_CLASS_J] = "Class J",
+        [MMC_CLASS_K] = "Class K",
+        [MMC_CLASS_M] = "Class M",
+        [MMC_CLASS_O] = "Class O",
+        [MMC_CLASS_R] = "Class R",
+        [MMC_CLASS_T] = "Class T",
+};
+
+typedef enum {
+    eClassNone = MMC_CLASS_NONE,
+    eClassA = MMC_CLASS_A,
+    eClassB = MMC_CLASS_B,
+    eClassC = MMC_CLASS_C,
+    eClassD = MMC_CLASS_D,
+    eClassE = MMC_CLASS_E,
+    eClassF = MMC_CLASS_F,
+    eClassG = MMC_CLASS_G,
+    eClassH = MMC_CLASS_H,
+    eClassJ = MMC_CLASS_J,
+    eClassK = MMC_CLASS_K,
+    eClassM = MMC_CLASS_M,
+    eClassO = MMC_CLASS_O,
+    eClassR = MMC_CLASS_R,
+    eClassT = MMC_CLASS_T,
+} sd_mmc_class_e;
+
+// Supported voltage ranges
 #define VDD_RANGE_27_30 ( VDD_27_28 | VDD_28_29 | VDD_29_30 )
 #define VDD_RANGE_30_33 ( VDD_30_31 | VDD_31_32 | VDD_32_33 )
 #define VDD_RANGE_33_36 ( VDD 33_34 | VDD_34_35 | VDD_35_36 )
 #define VDD_MASK        ( VDD_RANGE_27_30 | VDD_RANGE_30_33 | VDD_RANGE_33_36 )
 #define MMC_VOLTAGE_MASK ( VDD_17_19 | VDD_RANGE_27_30 | VDD_RANGE_30_33 | VDD_RANGE_33_36 )
 
+// Status bits
 #define CARD_UHS_II_STATUS          (1 << 29)
 #define CARD_CAPACITY_STATUS        (1 << 30)
 #define CARD_POWER_UP_BUSY          (1 << 31)

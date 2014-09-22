@@ -104,7 +104,44 @@ typedef struct {
              wp_grp_enable :1;
 } sd_csd_t;
 
+/*
+ * EXT CSD -- decoded structure
+ *   this only contains a subset of the entire 512 byte structure
+ */
+typedef struct {
+    // Properties segment (320 bytes)
+	uint8_t  min_perf_ddr_w;
+	uint8_t  min_perf_ddr_r;
+	uint8_t  min_perf_w_8_52;
+	uint8_t  min_perf_r_8_52;
+	uint8_t  min_perf_w_8_26_4_52;
+	uint8_t  min_perf_r_8_26_4_52;
+	uint8_t  min_perf_w_4_26;
+	uint8_t  min_perf_r_4_26;
+    uint32_t sec_count;
+    uint8_t  device_type;
+    uint8_t  csd_structure;
+    uint8_t  ext_csd_rev;
+
+    // Modes segment (192 bytes)
+    uint8_t  cmd_set;
+    uint8_t  cmd_set_rev;
+    uint8_t  power_class;
+    uint8_t  hs_timing;
+    uint8_t  bus_width;
+    uint32_t max_enh_size_mult;
+    uint32_t gp_size_mult1;
+    uint32_t gp_size_mult2;
+    uint32_t gp_size_mult3;
+    uint32_t enh_size_mult;
+    uint32_t enh_size_addr;
+
+    // Calculated values
+    uint64_t capacity;
+} ext_csd_t;
+
 void decode_cid_sd(uint32_t *raw_cid, sd_cid_t* cid);
 void decode_csd_sd(uint32_t *raw_csd, sd_csd_t* csd);
+void decode_ext_csd(uint32_t *raw_ext_csd, ext_csd_t* ext_csd);
 
 #endif

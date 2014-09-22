@@ -197,6 +197,7 @@ bool mmc_send_ext_csd(sdcard_t* card_p) {
                 dprintf(DEBUG_HDL_SD, "%08x", card_p->ext_csd[i]);
             }
             dprintf(DEBUG_HDL_SD, "\n");
+            decode_ext_csd(card_p->ext_csd, &card_p->decode.ext_csd_decode);
             break;
         }
 

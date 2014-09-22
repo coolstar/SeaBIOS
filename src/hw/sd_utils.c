@@ -62,6 +62,7 @@
 #include "string.h"
 #include "output.h"
 #include "sd_utils.h"
+#include "sd.h"
 
 static uint32_t get_bits(uint32_t *bits, int bit_len, int start, int size);
 
@@ -161,5 +162,96 @@ void decode_csd_sd(uint32_t *raw_csd, sd_csd_t* csd) {
     dprintf(DEBUG_HDL_SD, "  - MAX FREQ: %d Hz\n", csd->tran_speed);
     dprintf(DEBUG_HDL_SD, "  - TAAC: %dns\n", csd->taac);
     dprintf(DEBUG_HDL_SD, "  - NSAC: %d clock cycles\n", csd->nsac);
+}
+
+static void print_performance_class(ext_csd_t* ext_csd)
+{
+    uint8_t w, s;
+
+    w = ext_csd->bus_width;
+    s = ext_csd->hs_timing;
+
+    if( (w == DDR_8BIT) && (s == HS_TIMING_HIGH_SPEED) )
+    {
+    	dprintf( DEBUG_HDL_SD, "  - MIN_PERF_W_DDR: %s (%dKB/s)\n",
+    	    sdMmcClassStr[ext_csd->min_perf_ddr_w],
+    	    ext_csd->min_perf_ddr_w * 4 * 150);
+    	dprintf( DEBUG_HDL_SD, "  - MIN_PERF_R_DDR: %s (%dKB/s)\n",
+    	    sdMmcClassStr[ext_csd->min_perf_ddr_r],
+    	    ext_csd->min_perf_ddr_r * 4 * 150);
+    }
+    else if( (w == SDR_8BIT) && (s == HS_TIMING_HIGH_SPEED) )
+    {
+        dprintf( DEBUG_HDL_SD, "  - MIN_PERF_W_8_52: %s (%dKB/s)\n",
+            sdMmcClassStr[ext_csd->min_perf_w_8_52],
+            ext_csd->min_perf_w_8_52 * 2 * 150);
+        dprintf( DEBUG_HDL_SD, "  - MIN_PERF_R_8_52: %s (%dKB/s)\n",
+            sdMmcClassStr[ext_csd->min_perf_r_8_52],
+            ext_csd->min_perf_r_8_52 * 2 * 150);
+    }
+    else if( ((w == SDR_4BIT) && (s == HS_TIMING_HIGH_SPEED)) ||
+    		( (w == SDR_8BIT) && (s == HS_TIMING_COMPATIBILITY)) )
+    {
+        dprintf( DEBUG_HDL_SD, "  - MIN_PERF_W_8_26_4_52: %s (%dKB/s)\n",
+            sdMmcClassStr[ext_csd->min_perf_w_8_26_4_52],
+            ext_csd->min_perf_w_8_26_4_52 * 2 * 150);
+        dprintf( DEBUG_HDL_SD, "  - MIN_PERF_R_8_26_4_52: %s (%dKB/s)\n",
+            sdMmcClassStr[ext_csd->min_perf_r_8_26_4_52],
+            ext_csd->min_perf_r_8_26_4_52 * 2 * 150);
+    }
+    else if( (w == SDR_4BIT) && (s == HS_TIMING_COMPATIBILITY) ) {
+        dprintf( DEBUG_HDL_SD, "  - MIN_PERF_W_4_26: %s (%dKB/s)\n",
+            sdMmcClassStr[ext_csd->min_perf_w_4_26],
+            ext_csd->min_perf_w_4_26 * 2 * 150);
+        dprintf( DEBUG_HDL_SD, "  - MIN_PERF_R_4_26: %s (%dKB/s)\n",
+            sdMmcClassStr[ext_csd->min_perf_r_4_26],
+            ext_csd->min_perf_r_4_26 * 2 * 150);
+    }
+}
+
+void decode_ext_csd(uint32_t *raw_ext_csd, ext_csd_t *ext_csd)
+{
+	memset(ext_csd, 0, sizeof(*ext_csd));
+	// Properties segment - mostly RO
+	ext_csd->min_perf_ddr_w =
+	        (uint8_t)(raw_ext_csd[MIN_PERF_DDR_W / 4]);
+	ext_csd->min_perf_ddr_w =
+	        (uint8_t)(raw_ext_csd[MIN_PERF_DDR_R / 4] >> 8);
+	ext_csd->min_perf_w_8_52 =
+	        (uint8_t)(raw_ext_csd[MIN_PERF_W_8_52 / 4] >> 16);
+	ext_csd->min_perf_r_8_52 =
+	        (uint8_t)(raw_ext_csd[MIN_PERF_R_8_52 / 4] >> 8);
+	ext_csd->min_perf_w_8_26_4_52 =
+	        (uint8_t)(raw_ext_csd[MIN_PERF_W_8_26_4_52 / 4]);
+	ext_csd->min_perf_r_8_26_4_52 =
+	        (uint8_t)(raw_ext_csd[MIN_PERF_R_8_26_4_52 / 4] >> 24);
+	ext_csd->min_perf_w_4_26 =
+	        (uint8_t)(raw_ext_csd[MIN_PERF_W_4_26 / 4] >> 16);
+	ext_csd->min_perf_r_4_26 =
+	        (uint8_t)(raw_ext_csd[MIN_PERF_R_4_26 / 4] >> 8);
+    ext_csd->sec_count = raw_ext_csd[SEC_COUNT / 4];
+    ext_csd->capacity = (uint64_t)ext_csd->sec_count * 512;
+    ext_csd->device_type = (uint8_t)(raw_ext_csd[DEVICE_TYPE / 4] & 0x1f);
+    ext_csd->csd_structure =
+            (uint8_t)((raw_ext_csd[EXT_CSD_STRUCTURE / 4] >> 16) & 0x3);
+    ext_csd->ext_csd_rev = (uint8_t)(raw_ext_csd[EXT_CSD_REV / 4] & 0x3f);
+
+    // Modes segment - mostly R/W using CMD6 - Switch
+    ext_csd->cmd_set = (uint8_t)raw_ext_csd[CMD_SET / 4];
+    ext_csd->cmd_set_rev = (uint8_t)raw_ext_csd[CMD_SET_REV / 4];
+    ext_csd->power_class = (uint8_t)raw_ext_csd[POWER_CLASS / 4] & 0xf;
+    ext_csd->hs_timing = (uint8_t)raw_ext_csd[HS_TIMING / 4] & 0xf;
+    ext_csd->bus_width = (uint8_t)raw_ext_csd[BUS_WIDTH / 4] & 0x3f;
+
+    dprintf( DEBUG_HDL_SD, "EXT_CSD Register Info:\n" );
+    dprintf( DEBUG_HDL_SD, "  - EXT_CSD Version: 1.%d\n", ext_csd->ext_csd_rev );
+    dprintf( DEBUG_HDL_SD, "  - SEC_COUNT: 0x%x\n", ext_csd->sec_count );
+    dprintf( DEBUG_HDL_SD, "  - CAPACITY: 0x%08x%08x\n",
+            (uint32_t)( ext_csd->capacity >> 32), (uint32_t)(ext_csd->capacity) );
+    dprintf( DEBUG_HDL_SD, "  - DEVICE TYPE: 0x%x\n", ext_csd->device_type );
+    dprintf( DEBUG_HDL_SD, "  - CMD SET: %d\n", ext_csd->cmd_set );
+    dprintf( DEBUG_HDL_SD, "  - HS TIMING: %d\n", ext_csd->hs_timing );
+    dprintf( DEBUG_HDL_SD, "  - BUS WIDTH: %d\n", ext_csd->bus_width );
+    print_performance_class(ext_csd);
 }
 
