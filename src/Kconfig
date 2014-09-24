@@ -384,6 +384,11 @@ menu "BIOS interfaces"
         default y
         help
             Support for int15c2 mouse calls.
+    config KBC_POLL
+        bool "Poll the keyboad controller for keys"
+        default n
+        help
+            Poll for keys when interrupts are not available.
 
     config S3_RESUME
         bool "S3 resume"

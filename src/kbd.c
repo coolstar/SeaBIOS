@@ -262,6 +262,18 @@ handle_16(struct bregs *regs)
     // XXX - set_leds should be called from irq handler
     set_leds();
 
+    // If interrupts are not enabled do KBC polling.
+    // Check the KBC for a key on every keyboard service function (INT16).
+    // If interrupts are working the KBC status port should always be empty.
+    // (Yes, there is a race condition, but it is recoverable).
+    if (CONFIG_PS2PORT && CONFIG_KBC_POLL) {
+        u8 v = inb(PORT_PS2_STATUS);
+        if ((v & I8042_STR_OBF) && !(v & I8042_STR_AUXDATA)) {
+            v = inb(PORT_PS2_DATA);
+            process_key(v);
+        }
+    }
+
     switch (regs->ah) {
     case 0x00: handle_1600(regs); break;
     case 0x01: handle_1601(regs); break;

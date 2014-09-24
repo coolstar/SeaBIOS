@@ -435,7 +435,10 @@ get_keystroke(int msec)
             return get_raw_keystroke();
         if (irqtimer_check(end))
             return -1;
+     if (!CONFIG_KBC_POLL)
         yield_toirq();
+     else
+        msleep(5);
     }
 }
 
