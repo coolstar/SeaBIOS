@@ -156,9 +156,8 @@ static bool sdhc_poll_intr_status(sdhc_t* sd_ctrl_p, sdxfer_t* xfer_p,
             // clear the interrupt flag(s)
             bar_write32(sd_ctrl_p->bar_address, SDHCI_INT_STATUS, intr_flags);
             status = true;
-            dprintf(DEBUG_HDL_SD,
-                    "SDHC: requested interrupt (%x) occurred: %x\n", intr_flags,
-                    reg32);
+            dprintf(8, "SDHC: requested interrupt (%x) occurred: %x\n",
+                    intr_flags, reg32);
             break;
         } else if (reg32 & SDHCI_INT_ERROR_MASK) {
             // notify debug of timeout error
@@ -179,7 +178,7 @@ static bool sdhc_poll_intr_status(sdhc_t* sd_ctrl_p, sdxfer_t* xfer_p,
         }
         udelay(10);
     }
-    dprintf(DEBUG_HDL_SD, "SDHC: Current interrupt status register: 0x%08x\n",
+    dprintf(8, "SDHC: Current interrupt status register: 0x%08x\n",
             reg32);
 
     return status;
@@ -404,7 +403,7 @@ static bool sdhc_cmd(sdhc_t* sd_ctrl_p, sdxfer_t* xfer_p) {
     while (bar_read32(sd_ctrl_p->bar_address, SDHCI_PRESENT_STATE) & state_mask) {
         if (tmo == 0) {
             dprintf(DEBUG_HDL_SD,
-                    "SDHC: unable to access CMD/DAT bus, its always busy\n");
+                    "SDHC: Unable to access CMD/DAT bus, its always busy\n");
             return false;
         }
         tmo--;
@@ -457,7 +456,6 @@ static bool sdhc_cmd(sdhc_t* sd_ctrl_p, sdxfer_t* xfer_p) {
                 sdhc_read_block(sd_ctrl_p, xfer_p->data_p, BLOCK_SIZE8);
             }
         }
-
     }
 
     return true;
@@ -491,7 +489,7 @@ static void sdhc_read_block(sdhc_t* sd_ctrl_p, uint8_t* buf_p, uint32_t count) {
     //        while modifying the driver
     if (bar_read32(sd_ctrl_p->bar_address,
             SDHCI_PRESENT_STATE) & SDHCI_DATA_AVAILABLE) {
-        dprintf(DEBUG_HDL_SD, "SDHC: reading %d bytes of data\n", lim);
+        dprintf(8, "SDHC: reading %d bytes of data\n", lim);
 
         // calculate the number of 32 bit values to read by converting the limit to
         // dwords (additional bytes handled later)

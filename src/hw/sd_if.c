@@ -324,13 +324,12 @@ static int sd_disk_read_aligned(struct disk_op_s* op) {
             ret = DISK_RET_EPARAM;
             break;
         } else {
-            dprintf(DEBUG_HDL_SD,
-                    "sd disk %s, lba %6x, count %3x, buf %p, rc %d\n", "read",
+            dprintf(7, "sd disk %s, lba %6x, count %3x, buf %p, rc %d\n", "read",
                     (u32 )op->lba + i, op->count - i, cur_position, ret);
             cur_position += BLOCK_SIZE8;
         }
     }
-    dprintf(DEBUG_HDL_SD, "return from read ret = %u\n", ret);
+    dprintf(8, "return from read ret = %u\n", ret);
     return ret;
 }
 
@@ -350,7 +349,7 @@ static int sd_disk_read(struct disk_op_s* op) {
 
     // check if the callers buffer is word aligned, if so use it directly
     if (((uint32_t) op->buf_fl & 1) == 0) {
-        dprintf(DEBUG_HDL_SD, "sd read: buffer already aligned\n");
+        dprintf(8, "sd read: buffer already aligned\n");
         ret = sd_disk_read_aligned(op);
     } else {
         dprintf(DEBUG_HDL_SD,
@@ -401,14 +400,12 @@ int VISIBLE32FLAT process_sd_op(struct disk_op_s *op) {
     if (!CONFIG_SD)
         return 0;
 
-    dprintf(DEBUG_HDL_SD, "Executing SD disk transaction:  %d\r\n",
-            op->command);
+    dprintf(8, "Executing SD disk transaction:  %d\r\n", op->command);
     // execute a command
     switch (op->command) {
     case CMD_READ:
-        dprintf(DEBUG_HDL_SD, "SD CMD_READ: lba: 0x%08x%08x\n",
-                (uint32_t )(op->lba >> 32), (uint32_t )(op->lba));
-        dprintf(DEBUG_HDL_SD, "  op->count = %d\n", op->count);
+        dprintf(8, "SD CMD_READ: lba: 0x%08x%08x, op->count = %d\n",
+                (uint32_t )(op->lba >> 32), (uint32_t )(op->lba), op->count);
         ret = sd_disk_read(op);
         break;
     case CMD_WRITE:

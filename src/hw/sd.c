@@ -90,27 +90,25 @@ static bool sd_set_blocklen(sdcard_t* card_p);
 bool sd_host_xfer(sdhc_t* host_p, sdxfer_t* xfer_p) {
     bool status = false;
 
-    dprintf(DEBUG_HDL_SD, "SD card: Sending CMD%u with arg1 0x%08x\n",
+    dprintf(7, "SD card: Sending CMD%u with arg1 0x%08x\n",
             xfer_p->cmd_idx, xfer_p->arg1);
 
     status = host_p->sdhc_cmd(host_p, xfer_p);
     if (status) {
         switch (xfer_p->rsp_type) {
         case rsp136_e:
-            dprintf(DEBUG_HDL_SD,
-                    "SD card: Response 136: 0x%08x, 0x%08x, 0x%08x, 0x%08x\n",
+            dprintf(7, "SD card: Response 136: 0x%08x, 0x%08x, 0x%08x, 0x%08x\n",
                     xfer_p->response[0], xfer_p->response[1],
                     xfer_p->response[2], xfer_p->response[3]);
             break;
 
         case rsp48_e:
-            dprintf(DEBUG_HDL_SD, "SD card: Response 48: 0x%08x\n",
+            dprintf(7, "SD card: Response 48: 0x%08x\n",
                     xfer_p->response[0]);
             break;
 
         case rsp48_busy_e:
-            dprintf(DEBUG_HDL_SD,
-                    "SD card: Response 48 with busy signal: 0x%08x\n",
+            dprintf(7, "SD card: Response 48 with busy signal: 0x%08x\n",
                     xfer_p->response[0]);
             break;
 
@@ -185,12 +183,11 @@ bool sd_select_deselect_card(sdcard_t* card_p) {
     status = sd_host_xfer(card_p->host_p, &xfer);
 
     if (status) {
-        dprintf( DEBUG_HDL_SD,
-                "SD: Successfully selected the card with RCA %02x using CMD7!\n",
+        dprintf(7, "SD: Successfully selected the card with RCA %02x using CMD7!\n",
                 card_p->rca );
         card_p->is_selected = card_p->is_selected == true ? false : true;
     } else {
-        dprintf( DEBUG_HDL_SD,
+        dprintf(DEBUG_HDL_SD,
                 "SD: Error: Could not select the card with RCA %02x using CMD7\n",
                 card_p->rca );
     }
@@ -237,8 +234,7 @@ bool sd_read_single_block(sdcard_t* card_p, uint8_t* data_p, uint32_t addr) {
     xfer.rsp_type = rsp48_e;
     xfer.xfer_type = rdxfer_e;
     xfer.data_p = data_p;
-    dprintf(DEBUG_HDL_SD, "---- data_p address: 0x%08x ----\n",
-            (uint32_t )data_p);
+    dprintf(8, "---- data_p address: 0x%08x ----\n", (uint32_t)data_p);
 
     // invoke the host controller callback
     status = sd_host_xfer(card_p->host_p, &xfer);
@@ -597,8 +593,7 @@ static bool sd_set_blocklen(sdcard_t* card_p) {
     // invoke the host controller callback
     status = sd_host_xfer(card_p->host_p, &xfer);
     if (status)
-        dprintf(DEBUG_HDL_SD,
-                "SD: Successfully set blocklen to %d using CMD16\n",
+        dprintf(7, "SD: Successfully set blocklen to %d using CMD16\n",
                 card_p->decode.csd_decode.read_bl_len);
     else
         dprintf(DEBUG_HDL_SD, "SD: Could not set blocklen to %d using CMD16!\n",

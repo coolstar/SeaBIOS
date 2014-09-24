@@ -148,7 +148,7 @@ bool mmc_set_relative_addr(sdcard_t* card_p) {
                         xfer.response[0] & RCAERROR_MSK);
                 status = false;
             }
-            dprintf(DEBUG_HDL_SD, "MMC: Successfully set RCA to %x with CMD3\n",
+            dprintf(7, "MMC: Successfully set RCA to %x with CMD3\n",
                     card_p->rca);
             break;
         }
@@ -188,15 +188,15 @@ bool mmc_send_ext_csd(sdcard_t* card_p) {
     while (tries--) {
         status = sd_host_xfer(card_p->host_p, &xfer);
         if (status) {
-            dprintf(DEBUG_HDL_SD, "SD: Ext CSD:");
+            dprintf(7, "SD: Ext CSD:");
             for (i = 0; i < size; i++) {
                 if (!(i % 8))    // every 8th dword, start a new line
-                    dprintf(DEBUG_HDL_SD, "\n");
+                    dprintf(7, "\n");
                 else
-                    dprintf(DEBUG_HDL_SD, " ");
-                dprintf(DEBUG_HDL_SD, "%08x", card_p->ext_csd[i]);
+                    dprintf(7, " ");
+                dprintf(7, "%08x", card_p->ext_csd[i]);
             }
-            dprintf(DEBUG_HDL_SD, "\n");
+            dprintf(7, "\n");
             decode_ext_csd(card_p->ext_csd, &card_p->decode.ext_csd_decode);
             break;
         }
