@@ -72,7 +72,7 @@ static bool sdhc_poll_intr_status(sdhc_t* sd_ctrl_p, sdxfer_t* xfer_p,
 static void sdhc_get_ver_info(sdhc_t* sd_ctrl_p);
 static void sdhc_set_clock(sdhc_t* sd_ctrl_p, uint32_t clk_val);
 static void sdhc_set_power(sdhc_t* sd_ctrl_p, uint32_t pwr_mode);
-static void sdhc_read_block(sdhc_t* sd_ctrl_p, uint8_t* buf_p, uint32_t count);
+static void sdhc_read_block(sdhc_t* sd_ctrl_p, sdxfer_t* xfer_p);
 
 // callback function for performing command/response transactions
 static bool sdhc_cmd(sdhc_t* sd_ctrl_p, sdxfer_t* xfer_p);
@@ -93,25 +93,25 @@ static void sdhc_read_response(sdhc_t* sd_ctrl_p, sdxfer_t* xfer_p) {
     switch (xfer_p->rsp_type) {
     case rsp136_e:
         xfer_p->response[0] = bar_read32(sd_ctrl_p->bar_address,
-                SDHCI_RESPONSE);
+        SDHCI_RESPONSE);
         xfer_p->response[1] = bar_read32(sd_ctrl_p->bar_address,
-                SDHCI_RESPONSE + 0x04);
+        SDHCI_RESPONSE + 0x04);
         xfer_p->response[2] = bar_read32(sd_ctrl_p->bar_address,
-                SDHCI_RESPONSE + 0x08);
+        SDHCI_RESPONSE + 0x08);
         xfer_p->response[3] = bar_read32(sd_ctrl_p->bar_address,
-                SDHCI_RESPONSE + 0x0C);
+        SDHCI_RESPONSE + 0x0C);
         xfer_p->rsp_valid = true;
         break;
 
     case rsp48_e:
         xfer_p->response[0] = bar_read32(sd_ctrl_p->bar_address,
-                SDHCI_RESPONSE);
+        SDHCI_RESPONSE);
         xfer_p->rsp_valid = true;
         break;
 
     case rsp48_busy_e:
         xfer_p->response[0] = bar_read32(sd_ctrl_p->bar_address,
-                SDHCI_RESPONSE + 0x0C);
+        SDHCI_RESPONSE + 0x0C);
         xfer_p->rsp_valid = true;
         break;
 
@@ -178,8 +178,7 @@ static bool sdhc_poll_intr_status(sdhc_t* sd_ctrl_p, sdxfer_t* xfer_p,
         }
         udelay(10);
     }
-    dprintf(8, "SDHC: Current interrupt status register: 0x%08x\n",
-            reg32);
+    dprintf(8, "SDHC: Current interrupt status register: 0x%08x\n", reg32);
 
     return status;
 }
@@ -358,7 +357,7 @@ bool sdhc_reset(sdhc_t* sd_ctrl_p, uint8_t reset_flags) {
     // wait for all of the requested reset flags to clear until the timeout occurs
     timeout = 10;
     while ((resetResult = bar_read8(sd_ctrl_p->bar_address,
-            SDHCI_SOFTWARE_RESET) & reset_flags)) {
+    SDHCI_SOFTWARE_RESET) & reset_flags)) {
         if (timeout == 0) {
             dprintf(DEBUG_HDL_SD,
                     "SDHC: Reset Timeout for reset request type: 0x%02x\n",
@@ -410,51 +409,63 @@ static bool sdhc_cmd(sdhc_t* sd_ctrl_p, sdxfer_t* xfer_p) {
         udelay(100);
     }
 
-    if (tmo > 0) {
+    // clear any existing interrupts
+    uint32_t reg32 = bar_read32(sd_ctrl_p->bar_address, SDHCI_INT_STATUS);
+    bar_write32(sd_ctrl_p->bar_address, SDHCI_INT_STATUS, reg32);
 
-        // clear any existing interrupts
-        uint32_t reg32 = bar_read32(sd_ctrl_p->bar_address, SDHCI_INT_STATUS);
-        bar_write32(sd_ctrl_p->bar_address, SDHCI_INT_STATUS, reg32);
+    // set command argument
+    bar_write32(sd_ctrl_p->bar_address, SDHCI_ARGUMENT, xfer_p->arg1);
 
-        // set command argument
-        bar_write32(sd_ctrl_p->bar_address, SDHCI_ARGUMENT, xfer_p->arg1);
+    if (xfer_p->data_p && xfer_p->xfer_type == rdxfer_e) {
+        // set data transfer mode for reading data
+        mode = bar_read16(sd_ctrl_p->bar_address, SDHCI_TRANSFER_MODE);
+        if (xfer_p->cmd_idx == 18)    // multi block read
+            mode |= SDHCI_TRNS_MULTI | SDHCI_TRNS_BLK_CNT_EN;
+        else
+            // single block read
+            mode &= ~SDHCI_TRNS_MULTI;
+        mode |= SDHCI_TRNS_READ;
+        mode &= ~SDHCI_TRNS_DMA;
+        bar_write16(sd_ctrl_p->bar_address, SDHCI_TRANSFER_MODE, mode);
+    } else {
+        // set data transfer mode for commanding
+        mode = bar_read16(sd_ctrl_p->bar_address, SDHCI_TRANSFER_MODE);
+        mode &= ~( SDHCI_TRNS_READ | SDHCI_TRNS_MULTI | SDHCI_TRNS_DMA);
+        bar_write16(sd_ctrl_p->bar_address, SDHCI_TRANSFER_MODE, mode);
+    }
 
-        if (xfer_p->data_p && xfer_p->xfer_type == rdxfer_e) {
-            // set data transfer mode for reading data
-            mode = bar_read16(sd_ctrl_p->bar_address, SDHCI_TRANSFER_MODE);
-            mode |= ( SDHCI_TRNS_READ);
-            mode &= ~( SDHCI_TRNS_MULTI | SDHCI_TRNS_DMA);
-            bar_write16(sd_ctrl_p->bar_address, SDHCI_TRANSFER_MODE, mode);
-        } else {
-            // set data transfer mode for commanding
-            mode = bar_read16(sd_ctrl_p->bar_address, SDHCI_TRANSFER_MODE);
-            mode &= ~( SDHCI_TRNS_READ | SDHCI_TRNS_MULTI | SDHCI_TRNS_DMA);
-            bar_write16(sd_ctrl_p->bar_address, SDHCI_TRANSFER_MODE, mode);
+    // build the command transaction type
+    reg8 = (sd_ctrl_p->crc_chk_en) ? SDHCI_CMD_CRC : 0;
+    reg8 |= (sd_ctrl_p->idx_chk_en) ? SDHCI_CMD_INDEX : 0;
+    reg8 |= (xfer_p->data_p != NULL) ? SDHCI_CMD_DATA : 0;
+    reg8 |= (uint8_t) (xfer_p->cmd_type);
+    reg8 |= (uint8_t) (xfer_p->rsp_type);
+    bar_write8(sd_ctrl_p->bar_address, SDHCI_COMMAND_FLAGS, reg8);
+
+    // if this is a data transmission command, set block size and block count
+    if (xfer_p->data_p) {
+        // set the block size
+        bar_write16(sd_ctrl_p->bar_address, SDHCI_BLOCK_SIZE,
+                (uint16_t) sd_ctrl_p->block_size);
+
+        // set the block count
+        bar_write16(sd_ctrl_p->bar_address, SDHCI_BLOCK_COUNT,
+                xfer_p->block_count);
+    }
+
+    // initiate the transfer
+    bar_write8(sd_ctrl_p->bar_address, SDHCI_COMMAND, xfer_p->cmd_idx);
+
+    if (xfer_p->rsp_type != rsp_none_e) {
+        if (!sdhc_poll_intr_status(sd_ctrl_p, xfer_p, SDHCI_INT_RESPONSE, 1000)) {
+            dprintf(DEBUG_HDL_SD,
+                    "SDHC: failed to receive response to command\n");
+            return false;
         }
 
-        // build the command transaction type
-        reg8 = (sd_ctrl_p->crc_chk_en) ? SDHCI_CMD_CRC : 0;
-        reg8 |= (sd_ctrl_p->idx_chk_en) ? SDHCI_CMD_INDEX : 0;
-        reg8 |= (xfer_p->data_p != NULL) ? SDHCI_CMD_DATA : 0;
-        reg8 |= (uint8_t) (xfer_p->cmd_type);
-        reg8 |= (uint8_t) (xfer_p->rsp_type);
-        bar_write8(sd_ctrl_p->bar_address, SDHCI_COMMAND_FLAGS, reg8);
-
-        // initiate the transfer
-        bar_write8(sd_ctrl_p->bar_address, SDHCI_COMMAND, xfer_p->cmd_idx);
-
-        tmo = 10;
-        if (xfer_p->rsp_type != rsp_none_e) {
-            if (!sdhc_poll_intr_status(sd_ctrl_p, xfer_p, SDHCI_INT_RESPONSE, 1000)) {
-                dprintf(DEBUG_HDL_SD,
-                        "SDHC: failed to receive response to command\n");
-                return false;
-            }
-
-            // if this is a read block transaction break out here to get the data
-            if ((xfer_p->data_p) && (xfer_p->xfer_type == rdxfer_e)) {
-                sdhc_read_block(sd_ctrl_p, xfer_p->data_p, BLOCK_SIZE8);
-            }
+        // if this is a read block transaction break out here to get the data
+        if ((xfer_p->data_p) && (xfer_p->xfer_type == rdxfer_e)) {
+            sdhc_read_block(sd_ctrl_p, xfer_p);
         }
     }
 
@@ -462,63 +473,63 @@ static bool sdhc_cmd(sdhc_t* sd_ctrl_p, sdxfer_t* xfer_p) {
 }
 
 /**
- * @brief    sdhc_read_block - Read a block from the SD card, this function is only
+ * @brief    sdhc_read_block - Read blocks from the SD card, this function is only
  *                 executed if the data pointer and read flag are set in the sdhc_cmd
- *                 request
+ *                 request and block_count is greater than 0
  *
  * @param    sdhc_t* sd_ctrl_p - Pointer to the host controller abstraction
- * @param    uint8_t* buf_p - Buffer to fill in with data (typically a block)
- * @param    uint32_t count - Number of bytes to read in the transaction
+ * @param    uint8_t* xfer_p - pointer to the transfer abstraction
  *
  * @return   none
  */
-static void sdhc_read_block(sdhc_t* sd_ctrl_p, uint8_t* buf_p, uint32_t count) {
+static void sdhc_read_block(sdhc_t* sdctrl_p, sdxfer_t* xfer_p) {
     uint32_t lim = 0;
     uint32_t data_reg = 0;
     uint8_t* local_buf_p = NULL;
+    uint16_t count;
 
-    local_buf_p = buf_p;
+    // if block_count is 0, make sure it is at least 1
+    if (xfer_p->block_count < 1)
+        xfer_p->block_count = 1;
 
-    //lim = min(BLOCK_SIZE8, count);
-    lim = BLOCK_SIZE8;
+    local_buf_p = xfer_p->data_p;
 
-    // ensure that there is data available
-    //usleep(10000);
-    // @NOTE: This usleep call was to throttle transactions during development,
-    //        it can be commented back in to throttle block read transactions
-    //        while modifying the driver
-    if (bar_read32(sd_ctrl_p->bar_address,
-            SDHCI_PRESENT_STATE) & SDHCI_DATA_AVAILABLE) {
-        dprintf(8, "SDHC: reading %d bytes of data\n", lim);
-
-        // calculate the number of 32 bit values to read by converting the limit to
-        // dwords (additional bytes handled later)
-        lim >>= 2;
-        while (lim > 0) {
-            data_reg = bar_read32(sd_ctrl_p->bar_address, SDHCI_BUFFER);
-            local_buf_p[0] = (uint8_t) (data_reg);
-            local_buf_p[1] = (uint8_t) (data_reg >> 8);
-            local_buf_p[2] = (uint8_t) (data_reg >> 16);
-            local_buf_p[3] = (uint8_t) (data_reg >> 24);
-            local_buf_p += 4;
-            lim--;
+    for (count = 0; count < xfer_p->block_count; count++) {
+        // wait for DATA_AVAILABLE Interrupt
+        if (!sdhc_poll_intr_status(sdctrl_p, xfer_p, SDHCI_INT_DATA_AVAIL, 1000)) {
+            dprintf(DEBUG_HDL_SD,
+                    "SDHC: failed to receive Data Available Interrupt\n");
+            return;
         }
 
-        // handle the remainder
-        lim = count & 0x03;
-        if (lim > 0) {
-            data_reg = bar_read32(sd_ctrl_p->bar_address, SDHCI_BUFFER);
+        lim = sdctrl_p->block_size;
+        if (bar_read32(sdctrl_p->bar_address,
+                SDHCI_PRESENT_STATE) & SDHCI_DATA_AVAILABLE) {
+            // calculate the number of 32 bit values to read by converting the limit to
+            // dwords
+            lim >>= 2;
             while (lim > 0) {
-                *(local_buf_p++) = (uint8_t) data_reg;
-                data_reg >>= 8;
+                data_reg = bar_read32(sdctrl_p->bar_address, SDHCI_BUFFER);
+                local_buf_p[0] = (uint8_t) (data_reg);
+                local_buf_p[1] = (uint8_t) (data_reg >> 8);
+                local_buf_p[2] = (uint8_t) (data_reg >> 16);
+                local_buf_p[3] = (uint8_t) (data_reg >> 24);
+                local_buf_p += 4;
                 lim--;
             }
         }
-    }
-#if(CONFIG_DEBUG_LEVEL > 9)
-    hexdump(buf_p, BLOCK_SIZE8);
-#endif
 
+#if(CONFIG_DEBUG_LEVEL > 9)
+        hexdump((void *)xfer_p->data_p + (count * BLOCK_SIZE8), BLOCK_SIZE8);
+#endif
+    }
+
+    // wait for TRANSFER_COMPLETE Interrupt
+    if (!sdhc_poll_intr_status(sdctrl_p, xfer_p, SDHCI_INT_DATA_END, 1000)) {
+        dprintf(DEBUG_HDL_SD,
+                "SDHC: failed to receive Transfer Complete Interrupt\n");
+        return;
+    }
 }
 
 /**
@@ -673,31 +684,32 @@ bool sdhc_init(sdhc_t* sd_ctrl_p) {
 
         // setup the interrupts
         bar_write32(sd_ctrl_p->bar_address, SDHCI_INT_ENABLE,
-            SDHCI_INT_BUS_POWER |
-            SDHCI_INT_DATA_END_BIT |
-            SDHCI_INT_DATA_CRC | SDHCI_INT_DATA_TIMEOUT | SDHCI_INT_INDEX |
-            SDHCI_INT_END_BIT | SDHCI_INT_CRC | SDHCI_INT_TIMEOUT |
-            SDHCI_INT_CARD_REMOVE | SDHCI_INT_CARD_INSERT |
-            SDHCI_INT_DATA_AVAIL | SDHCI_INT_SPACE_AVAIL |
-            SDHCI_INT_DMA_END | SDHCI_INT_DATA_END | SDHCI_INT_RESPONSE |
-            SDHCI_INT_ACMD12ERR);
+        SDHCI_INT_BUS_POWER |
+        SDHCI_INT_DATA_END_BIT |
+        SDHCI_INT_DATA_CRC | SDHCI_INT_DATA_TIMEOUT | SDHCI_INT_INDEX |
+        SDHCI_INT_END_BIT | SDHCI_INT_CRC | SDHCI_INT_TIMEOUT |
+        SDHCI_INT_CARD_REMOVE | SDHCI_INT_CARD_INSERT |
+        SDHCI_INT_DATA_AVAIL | SDHCI_INT_SPACE_AVAIL |
+        SDHCI_INT_DMA_END | SDHCI_INT_DATA_END | SDHCI_INT_RESPONSE |
+        SDHCI_INT_ACMD12ERR);
 
         // and signals
         bar_write32(sd_ctrl_p->bar_address, SDHCI_SIGNAL_ENABLE,
-            SDHCI_INT_BUS_POWER |
-            SDHCI_INT_DATA_END_BIT |
-            SDHCI_INT_DATA_CRC | SDHCI_INT_DATA_TIMEOUT | SDHCI_INT_INDEX |
-            SDHCI_INT_END_BIT | SDHCI_INT_CRC | SDHCI_INT_TIMEOUT |
-            SDHCI_INT_CARD_REMOVE | SDHCI_INT_CARD_INSERT |
-            SDHCI_INT_DATA_AVAIL | SDHCI_INT_SPACE_AVAIL |
-            SDHCI_INT_DMA_END | SDHCI_INT_DATA_END | SDHCI_INT_RESPONSE |
-            SDHCI_INT_ACMD12ERR);
+        SDHCI_INT_BUS_POWER |
+        SDHCI_INT_DATA_END_BIT |
+        SDHCI_INT_DATA_CRC | SDHCI_INT_DATA_TIMEOUT | SDHCI_INT_INDEX |
+        SDHCI_INT_END_BIT | SDHCI_INT_CRC | SDHCI_INT_TIMEOUT |
+        SDHCI_INT_CARD_REMOVE | SDHCI_INT_CARD_INSERT |
+        SDHCI_INT_DATA_AVAIL | SDHCI_INT_SPACE_AVAIL |
+        SDHCI_INT_DMA_END | SDHCI_INT_DATA_END | SDHCI_INT_RESPONSE |
+        SDHCI_INT_ACMD12ERR);
 
         reg32 = bar_read32(sd_ctrl_p->bar_address, SDHCI_INT_ENABLE);
         dprintf(DEBUG_HDL_SD, "SDHC: Interrupts enabled to: 0x%08x\n", reg32);
 
         reg32 = bar_read32(sd_ctrl_p->bar_address, SDHCI_INT_STATUS);
-        dprintf(DEBUG_HDL_SD, "SDHC: Current interrupt status: 0x%08x\n", reg32);
+        dprintf(DEBUG_HDL_SD, "SDHC: Current interrupt status: 0x%08x\n",
+                reg32);
 
         reg32 = bar_read32(sd_ctrl_p->bar_address, SDHCI_SIGNAL_ENABLE);
         dprintf(DEBUG_HDL_SD, "SDHC: signals enabled to: 0x%08x\n", reg32);

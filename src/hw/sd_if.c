@@ -87,30 +87,30 @@ static void sd_disk_init(sdif_t* sdif_p) {
     sdif_p->drive.sectors =
             sdif_p->hostctrl_p->card_p->decode.csd_decode.capacity >> 9;
 
-    if(sdif_p->hostctrl_p->slot_type == removable_card_e) {
+    if (sdif_p->hostctrl_p->slot_type == removable_card_e) {
         // generate host vendor/spec string
         sdif_p->desc = znprintf(MAXDESCSIZE,
-                              "SD Card Vendor ID: %d %c%c%c%c%c Rev %d.%d",
-                              sdif_p->hostctrl_p->host_vendor_id,
-                              sdif_p->hostctrl_p->card_p->cid[0] & 0xff,
-                              (sdif_p->hostctrl_p->card_p->cid[1] >> 24) & 0xff,
-                              (sdif_p->hostctrl_p->card_p->cid[1] >> 16) & 0xff,
-                              (sdif_p->hostctrl_p->card_p->cid[1] >> 8 ) & 0xff,
-                              sdif_p->hostctrl_p->card_p->cid[1] & 0xff,
-                              (sdif_p->hostctrl_p->card_p->cid[2] >> 20) & 0xf,
-                              (sdif_p->hostctrl_p->card_p->cid[2] >> 16) & 0xf);
+                "SD Card Vendor ID: %d %c%c%c%c%c Rev %d.%d",
+                sdif_p->hostctrl_p->host_vendor_id,
+                sdif_p->hostctrl_p->card_p->cid[0] & 0xff,
+                (sdif_p->hostctrl_p->card_p->cid[1] >> 24) & 0xff,
+                (sdif_p->hostctrl_p->card_p->cid[1] >> 16) & 0xff,
+                (sdif_p->hostctrl_p->card_p->cid[1] >> 8) & 0xff,
+                sdif_p->hostctrl_p->card_p->cid[1] & 0xff,
+                (sdif_p->hostctrl_p->card_p->cid[2] >> 20) & 0xf,
+                (sdif_p->hostctrl_p->card_p->cid[2] >> 16) & 0xf);
     } else {
         sdif_p->desc = znprintf(MAXDESCSIZE,
-                              "MMC Vendor ID: %d %c%c%c%c%c%c Rev %d.%d",
-                              sdif_p->hostctrl_p->host_vendor_id,
-                              sdif_p->hostctrl_p->card_p->cid[0] & 0xff,
-                              (sdif_p->hostctrl_p->card_p->cid[1] >> 24) & 0xff,
-                              (sdif_p->hostctrl_p->card_p->cid[1] >> 16) & 0xff,
-                              (sdif_p->hostctrl_p->card_p->cid[1] >> 8 ) & 0xff,
-                              sdif_p->hostctrl_p->card_p->cid[1] & 0xff,
-                              (sdif_p->hostctrl_p->card_p->cid[2] >> 24) & 0xff,
-                              (sdif_p->hostctrl_p->card_p->cid[2] >> 20) & 0xf,
-                              (sdif_p->hostctrl_p->card_p->cid[2] >> 16) & 0xf);
+                "MMC Vendor ID: %d %c%c%c%c%c%c Rev %d.%d",
+                sdif_p->hostctrl_p->host_vendor_id,
+                sdif_p->hostctrl_p->card_p->cid[0] & 0xff,
+                (sdif_p->hostctrl_p->card_p->cid[1] >> 24) & 0xff,
+                (sdif_p->hostctrl_p->card_p->cid[1] >> 16) & 0xff,
+                (sdif_p->hostctrl_p->card_p->cid[1] >> 8) & 0xff,
+                sdif_p->hostctrl_p->card_p->cid[1] & 0xff,
+                (sdif_p->hostctrl_p->card_p->cid[2] >> 24) & 0xff,
+                (sdif_p->hostctrl_p->card_p->cid[2] >> 20) & 0xf,
+                (sdif_p->hostctrl_p->card_p->cid[2] >> 16) & 0xf);
     }
 
     sdif_p->boot_priority = bootprio_find_pci_device(
@@ -317,19 +317,30 @@ static int sd_disk_read_aligned(struct disk_op_s* op) {
     uint16_t i = 0;
     uint8_t* cur_position = (uint8_t*) op->buf_fl;
 
-    for (i = 0; i < op->count; i++) {
-        if (!sd_read_single_block(sdif_p->hostctrl_p->card_p, cur_position,
-                (uint32_t) (op->lba + i))) {
-            dprintf(DEBUG_HDL_SD, "SD Read Fail\n");
+    if (op->count > 1) {
+        dprintf(7, "sd disk read, lba %6x, count %3x, buf %p\n",
+                (u32 )op->lba, op->count, cur_position);
+        if (!sd_read_multiple_block(sdif_p->hostctrl_p->card_p, cur_position,
+                (uint32_t) (op->lba), op->count)) {
+            dprintf(DEBUG_HDL_SD, "SD: Multiple Block Read Failed\n");
             ret = DISK_RET_EPARAM;
-            break;
-        } else {
-            dprintf(7, "sd disk %s, lba %6x, count %3x, buf %p, rc %d\n", "read",
-                    (u32 )op->lba + i, op->count - i, cur_position, ret);
-            cur_position += BLOCK_SIZE8;
+        }
+    } else {
+        for (i = 0; i < op->count; i++) {
+            dprintf(7, "sd disk read, lba %6x, count %3x, buf %p\n",
+                    (u32 )op->lba + i, op->count - i, cur_position);
+            if (!sd_read_single_block(sdif_p->hostctrl_p->card_p, cur_position,
+                    (uint32_t) (op->lba + i))) {
+                dprintf(DEBUG_HDL_SD, "SD: Single Block Read Failed\n");
+                ret = DISK_RET_EPARAM;
+                break;
+            } else {
+                cur_position += BLOCK_SIZE8;
+            }
         }
     }
-    dprintf(8, "return from read ret = %u\n", ret);
+
+    dprintf(8, "return from read retval = %u\n", ret);
     return ret;
 }
 

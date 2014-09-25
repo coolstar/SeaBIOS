@@ -76,6 +76,7 @@ static bool sd_send_relative_addr(sdcard_t* card_p);
 static bool sd_card_identification_mode(sdcard_t* card_p);
 static bool sd_send_status(sdcard_t* card_p);
 static bool sd_set_blocklen(sdcard_t* card_p);
+static bool sd_set_block_count(sdcard_t* card_p, uint16_t count);
 
 /**
  * @brief     sd_host_xfer - Execute the host controller callback to perform
@@ -184,12 +185,12 @@ bool sd_select_deselect_card(sdcard_t* card_p) {
 
     if (status) {
         dprintf(7, "SD: Successfully selected the card with RCA %02x using CMD7!\n",
-                card_p->rca );
+                card_p->rca);
         card_p->is_selected = card_p->is_selected == true ? false : true;
     } else {
         dprintf(DEBUG_HDL_SD,
                 "SD: Error: Could not select the card with RCA %02x using CMD7\n",
-                card_p->rca );
+                card_p->rca);
     }
 
     return status;
@@ -207,6 +208,9 @@ bool sd_select_deselect_card(sdcard_t* card_p) {
 bool sd_read_single_block(sdcard_t* card_p, uint8_t* data_p, uint32_t addr) {
     bool status = false;
     sdxfer_t xfer;
+
+    dprintf(8, "---- Read a Single Block into 0x%08x ----\n",
+            (uint32_t)data_p);
 
     if (!card_p->is_selected) {
         // select the card (CMD7)
@@ -229,28 +233,113 @@ bool sd_read_single_block(sdcard_t* card_p, uint8_t* data_p, uint32_t addr) {
     // set up a transaction structure
     memset(&xfer, 0, sizeof(sdxfer_t));
     xfer.cmd_idx = MMC_READ_SINGLE_BLOCK_CMD17;
+    xfer.block_count = 1;
     xfer.arg1 = addr;
     xfer.cmd_type = cmd_normal_e;
     xfer.rsp_type = rsp48_e;
     xfer.xfer_type = rdxfer_e;
     xfer.data_p = data_p;
-    dprintf(8, "---- data_p address: 0x%08x ----\n", (uint32_t)data_p);
+
+    // invoke the host controller callback
+    status = sd_host_xfer(card_p->host_p, &xfer);
+    dprintf(8, "---- Finished Reading a Single Block into 0x%08x ----\n",
+            (uint32_t)data_p);
+
+    return status;
+}
+
+/**
+ * @brief    sd_read_multiple_block - This function implements CMD18 - MULTIPLE_BLOCK_READ,
+ *               which will read multiple blocks from the card
+ *
+ * @param    sdcard_t* card_p - pointer to the SD card abstraction structure
+ * @param    uint8_t* data_p - Pointer to the data buffer to read into
+ * @param    uint32_t addr - Logical block address to read
+ * @param    uint16_t count - Number of blocks to read
+ *
+ * @return   bool - True on success, false otherwise
+ */
+bool sd_read_multiple_block(sdcard_t* card_p, uint8_t* data_p, uint32_t addr, uint16_t count) {
+    bool status = false;
+    sdxfer_t xfer;
+
+    dprintf(8, "---- Reading %d Blocks into 0x%08x ----\n",
+            count, (uint32_t)data_p);
+
+    if (!card_p->is_selected) {
+        // select the card (CMD7)
+        if (!sd_select_deselect_card(card_p)) {
+            return status;
+        }
+    }
+
+    if (card_p->state != tran_e) {
+        // check that the card is in transfer state (CMD13)
+        if (!sd_send_status(card_p))
+            return status;
+    }
+
+    // set the block length (CMD16)
+    if (!sd_set_blocklen(card_p)) {
+        return status;
+    }
+
+    // set the number of blocks to read (CMD23)
+    if (card_p->host_p->slot_type != removable_card_e) {
+        // older SD cards don't support this, check SD CSR register
+        if (!sd_set_block_count(card_p, count)) {
+            return status;
+        }
+    }
+
+    // set up a transaction structure
+    memset(&xfer, 0, sizeof(sdxfer_t));
+    xfer.block_count = count;
+    xfer.cmd_idx = MMC_READ_MULTIPLE_BLOCK_CMD18;
+    xfer.arg1 = addr;
+    xfer.cmd_type = cmd_normal_e;
+    xfer.rsp_type = rsp48_e;
+    xfer.xfer_type = rdxfer_e;
+    xfer.data_p = data_p;
 
     // invoke the host controller callback
     status = sd_host_xfer(card_p->host_p, &xfer);
 
+    // stop the transmission (CMD12)
+    if (card_p->host_p->slot_type == removable_card_e) {
+        // only needed when CMD23 isn't sent
+        sd_stop_transmission(card_p);
+    }
+
+    dprintf(8, "---- Finished Reading %d Blocks into 0x%08x ----\n", count,
+            (uint32_t)data_p);
+
     return status;
 }
-
-bool sd_read_multiple_block(sdcard_t* card_p) {
-    bool status = false;
-    // stub
-    return status;
-}
-
+/**
+ * @brief    sd_stop_transmission - This function implements CMD12 - STOP_TRANSMISSION,
+ *                 which stops any existing data transmission to/from the SD card
+ *
+ * @param    sdcard_t* card_p - Pointer to the SD card abstraction structure
+ *
+ * @return   bool - True if successful, false otherwise
+ */
 bool sd_stop_transmission(sdcard_t* card_p) {
     bool status = false;
-    // stub
+    sdxfer_t xfer;
+
+    // set up a transaction structure
+    memset(&xfer, 0, sizeof(sdxfer_t));
+    xfer.cmd_idx = MMC_STOP_TRANSMISSION_CMD12;
+    xfer.arg1 = 0;
+    xfer.cmd_type = cmd_normal_e;
+    xfer.rsp_type = rsp48_busy_e;
+    xfer.xfer_type = wrxfer_e;
+    xfer.data_p = NULL;
+
+    // invoke the host controller callback
+    status = sd_host_xfer(card_p->host_p, &xfer);
+
     return status;
 }
 
@@ -556,8 +645,8 @@ static bool sd_send_status(sdcard_t* card_p) {
     while (cycleTries--) {
         status = sd_host_xfer(card_p->host_p, &xfer);
         if (status) {
-            card_p->state = (sd_card_state_e)(
-                    (xfer.response[0] & RCASTATUS_CURRENT_STATE) >> 9);
+            card_p->state = (sd_card_state_e)
+                    ((xfer.response[0] & RCASTATUS_CURRENT_STATE) >> 9);
             dprintf(DEBUG_HDL_SD,
                     "SD: Current status is 0x%08x (in %s state)\n",
                     xfer.response[0], sd_state_names[card_p->state]);
@@ -603,6 +692,41 @@ static bool sd_set_blocklen(sdcard_t* card_p) {
 }
 
 /**
+ * @brief    sd_set_block_count - This function implements CMD23 - SET_BLOCK_COUNT,
+ *               which sets the number of blocks to read/write in a multi-block
+ *               read/write operation
+ *
+ * @param    sdcard_t* card_p - Pointer to the SD card abstraction structure
+ * @param    uint16_t count - Number of blocks to set
+ *
+ * @return   bool - True on success, false otherwise
+ */
+static bool sd_set_block_count(sdcard_t* card_p, uint16_t count) {
+    bool status = false;
+    sdxfer_t xfer;
+
+    // set up a transaction structure
+    memset(&xfer, 0, sizeof(sdxfer_t));
+    xfer.cmd_idx = MMC_SET_BLOCK_COUNT_CMD23;
+    xfer.arg1 = count;
+    xfer.cmd_type = cmd_normal_e;
+    xfer.rsp_type = rsp48_e;
+    xfer.xfer_type = wrxfer_e;
+    xfer.data_p = NULL;
+
+    // invoke the host controller callback
+    status = sd_host_xfer(card_p->host_p, &xfer);
+    if (status)
+        dprintf(7, "SD: Successfully set block count to %d with CMD23\n",
+                count);
+    else
+        dprintf(DEBUG_HDL_SD,
+                "SD: Could not set block count to %d with CMD23!\n", count);
+
+    return status;
+}
+
+/**
  * @brief    sd_card_identification_mode - This function executes the call sequence/state
  *                 machine outlined in section 4.2 of "Physical Layer Simplified Specification
  *                 Version 4.10"
@@ -639,16 +763,16 @@ static bool sd_card_identification_mode(sdcard_t* card_p) {
             }
         } else if (card_type == embedded_slot_e) {
             dprintf(DEBUG_HDL_SD, "MMC: Init MMC card, send CMD1\n");
-            if(!(status = mmc_send_op_cond(card_p))) {
+            if (!(status = mmc_send_op_cond(card_p))) {
                 dprintf(DEBUG_HDL_SD, "No MMC card found\n");
                 continue;
             }
         }
 
         // If the voltage needs to change based on the response for ACMD41,
-    	// change it using CMD11
+        // change it using CMD11
         // @TODO: implement CMD11 voltage switch if necessary...
-    	// probably don't need to support this for a while
+        // probably don't need to support this for a while
 
         // Send CMD2 to get the CID, the card should be in identification state
         if (!(status = sd_all_send_cid(card_p)))
@@ -657,7 +781,7 @@ static bool sd_card_identification_mode(sdcard_t* card_p) {
         // CMD3 - SD: send_relative_card_address, MMC: set_relative_card_address
         //        Get or set the Relative Card Address (RCA) used for broadcast commands
         if (card_type == removable_card_e) {
-            if(!(status = sd_send_relative_addr(card_p)))
+            if (!(status = sd_send_relative_addr(card_p)))
                 continue;
         } else if (card_type == embedded_slot_e) {
             if (!(status = mmc_set_relative_addr(card_p)))

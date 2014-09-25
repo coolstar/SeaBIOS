@@ -110,25 +110,25 @@ typedef struct {
  */
 typedef struct {
     // Properties segment (320 bytes)
-	uint8_t  min_perf_ddr_w;
-	uint8_t  min_perf_ddr_r;
-	uint8_t  min_perf_w_8_52;
-	uint8_t  min_perf_r_8_52;
-	uint8_t  min_perf_w_8_26_4_52;
-	uint8_t  min_perf_r_8_26_4_52;
-	uint8_t  min_perf_w_4_26;
-	uint8_t  min_perf_r_4_26;
+    uint8_t min_perf_ddr_w;
+    uint8_t min_perf_ddr_r;
+    uint8_t min_perf_w_8_52;
+    uint8_t min_perf_r_8_52;
+    uint8_t min_perf_w_8_26_4_52;
+    uint8_t min_perf_r_8_26_4_52;
+    uint8_t min_perf_w_4_26;
+    uint8_t min_perf_r_4_26;
     uint32_t sec_count;
-    uint8_t  device_type;
-    uint8_t  csd_structure;
-    uint8_t  ext_csd_rev;
+    uint8_t device_type;
+    uint8_t csd_structure;
+    uint8_t ext_csd_rev;
 
     // Modes segment (192 bytes)
-    uint8_t  cmd_set;
-    uint8_t  cmd_set_rev;
-    uint8_t  power_class;
-    uint8_t  hs_timing;
-    uint8_t  bus_width;
+    uint8_t cmd_set;
+    uint8_t cmd_set_rev;
+    uint8_t power_class;
+    uint8_t hs_timing;
+    uint8_t bus_width;
     uint32_t max_enh_size_mult;
     uint32_t gp_size_mult1;
     uint32_t gp_size_mult2;

@@ -55,7 +55,7 @@
 
 #define MMC_SEND_OP_COND_CMD1   1
 #define MMC_OCR_VOLTAGE_MASK    0x00ff8080
-#define MMC_OCR_ACCESS_MODE	    0x40000000
+#define MMC_OCR_ACCESS_MODE        0x40000000
 
 bool mmc_send_op_cond(sdcard_t* card_p);
 bool mmc_send_ext_csd(sdcard_t* card_p);

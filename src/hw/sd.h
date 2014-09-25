@@ -113,6 +113,7 @@ typedef struct {
     sdcmd_type_e cmd_type;
     sdrsp_type_e rsp_type;
     sdxfer_type_e xfer_type;
+    uint16_t block_count;
     uint32_t response[4];
     bool rsp_valid;
     void* data_p;
@@ -167,16 +168,16 @@ typedef enum {
 } sd_card_state_e;
 
 char *sd_state_names[16] = {
-        "Idle",
-        "Ready",
-        "Identification",
-        "Standby",
-        "Transfer",
-        "Data",
-        "Receive",
-        "Program",
-        "Disabled",
-        "Invalid"
+    "Idle",
+    "Ready",
+    "Identification",
+    "Standby",
+    "Transfer",
+    "Data",
+    "Receive",
+    "Program",
+    "Disabled",
+    "Invalid"
 };
 
 /**
@@ -222,6 +223,7 @@ typedef struct sdcard_t {
 #define MMC_SET_BLOCKLEN_CMD16            16
 #define MMC_READ_SINGLE_BLOCK_CMD17       17
 #define MMC_READ_MULTIPLE_BLOCK_CMD18     18
+#define MMC_SET_BLOCK_COUNT_CMD23         23
 #define MMC_WRITE_SINGLE_BLOCK_CMD24      24
 #define MMC_WRITE_MULTIPLE_BLOCK_CMD25    25
 #define MMC_ERASE_GROUP_START_CMD35       35
@@ -272,7 +274,7 @@ typedef struct sdcard_t {
 #define VDD_S18A     (1 << 24)
 
 // Ext CSD bit fields
-#define EXT_CSD_SIZE	512
+#define EXT_CSD_SIZE    512
 
 #define MIN_PERF_DDR_W    235
 #define MIN_PERF_DDR_R    234
@@ -346,21 +348,21 @@ typedef struct sdcard_t {
  * SD/MMC Speed Classes
  */
 const char* sdMmcClassStr[] = {
-        [MMC_CLASS_NONE] = "No Class",
-        [MMC_CLASS_A] = "Class A",
-        [MMC_CLASS_B] = "Class B",
-        [MMC_CLASS_C] = "Class C",
-        [MMC_CLASS_D] = "Class D",
-        [MMC_CLASS_E] = "Class E",
-        [MMC_CLASS_F] = "Class F",
-        [MMC_CLASS_G] = "Class G",
-        [MMC_CLASS_H] = "Class H",
-        [MMC_CLASS_J] = "Class J",
-        [MMC_CLASS_K] = "Class K",
-        [MMC_CLASS_M] = "Class M",
-        [MMC_CLASS_O] = "Class O",
-        [MMC_CLASS_R] = "Class R",
-        [MMC_CLASS_T] = "Class T",
+    [MMC_CLASS_NONE] = "No Class",
+    [MMC_CLASS_A] = "Class A",
+    [MMC_CLASS_B] = "Class B",
+    [MMC_CLASS_C] = "Class C",
+    [MMC_CLASS_D] = "Class D",
+    [MMC_CLASS_E] = "Class E",
+    [MMC_CLASS_F] = "Class F",
+    [MMC_CLASS_G] = "Class G",
+    [MMC_CLASS_H] = "Class H",
+    [MMC_CLASS_J] = "Class J",
+    [MMC_CLASS_K] = "Class K",
+    [MMC_CLASS_M] = "Class M",
+    [MMC_CLASS_O] = "Class O",
+    [MMC_CLASS_R] = "Class R",
+    [MMC_CLASS_T] = "Class T",
 };
 
 typedef enum {
@@ -431,10 +433,10 @@ typedef enum {
 
 bool sd_card_bus_init(sdhc_t* hostctrl_p);
 bool sd_read_single_block(sdcard_t* card_p, uint8_t* data_p, uint32_t addr);
-bool sd_read_multiple_block(sdcard_t* card_p);
+bool sd_read_multiple_block(sdcard_t* card_p, uint8_t* data_p, uint32_t addr, uint16_t count);
 bool sd_stop_transmission(sdcard_t* card_p);
 bool sd_idle(sdcard_t* card_p);
 bool sd_select_deselect_card(sdcard_t* card_p);
-bool sd_host_xfer(sdhc_t* host_p, sdxfer_t* pxfer_t);
+bool sd_host_xfer(sdhc_t* host_p, sdxfer_t* xfer_p_t);
 
 #endif // __SD_H

@@ -129,7 +129,7 @@ bool mmc_set_relative_addr(sdcard_t* card_p) {
     sdxfer_t xfer;
     uint32_t tries = SD_TRY_AGAIN;
 
-    card_p->rca = 0x0001;// No particular meaning, just a value to identify this device
+    card_p->rca = 0x0001; // No particular meaning, just a value to identify this device
 
     memset(&xfer, 0, sizeof(sdxfer_t));
     xfer.cmd_idx = MMC_SET_RELATIVE_ADDR_CMD3;
@@ -178,6 +178,7 @@ bool mmc_send_ext_csd(sdcard_t* card_p) {
     size = sizeof(card_p->ext_csd) / sizeof(uint32_t);
 
     memset(&xfer, 0, sizeof(sdxfer_t));
+    xfer.block_count = 1;
     xfer.cmd_idx = MMC_SEND_EXT_CSD_CMD8;
     xfer.arg1 = (uint32_t) (card_p->rca) << 16;
     xfer.cmd_type = cmd_normal_e;
