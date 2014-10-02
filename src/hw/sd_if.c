@@ -64,8 +64,6 @@
 #include "sdhc_generic.h"
 #include "sd_if.h"
 
-sdif_t* g_pdev;
-
 static int sd_disk_read(struct disk_op_s* op);
 static int sd_disk_read_aligned(struct disk_op_s* op);
 
@@ -180,40 +178,42 @@ static bool sd_card_detect(sdif_t* sdif_p) {
  * @return   none
  */
 static void sd_config_setup(struct pci_device* pci) {
+    sdif_t* dev_p;
+
     dprintf(DEBUG_HDL_SD, "sd_config_setup on device %02x:%02x.%x \n",
             pci_bdf_to_bus(pci->bdf), pci_bdf_to_dev(pci->bdf),
             pci_bdf_to_fn(pci->bdf));
 
     // allocate the PCI to SD interface structure
-    g_pdev = (sdif_t*) malloc_fseg(sizeof(*g_pdev));
-    if (!g_pdev) {
+    dev_p = (sdif_t*) malloc_fseg(sizeof(*dev_p));
+    if (!dev_p) {
         warn_noalloc();
         return;
     }
-    memset(g_pdev, 0, sizeof(*g_pdev));
+    memset(dev_p, 0, sizeof(*dev_p));
 
     // allocate the host controller
-    g_pdev->hostctrl_p = (sdhc_t*) malloc_fseg(sizeof(*g_pdev->hostctrl_p));
-    if (!(g_pdev->hostctrl_p)) {
+    dev_p->hostctrl_p = (sdhc_t*) malloc_fseg(sizeof(*dev_p->hostctrl_p));
+    if (!(dev_p->hostctrl_p)) {
         warn_noalloc();
-        free(g_pdev);
+        free(dev_p);
         return;
     }
-    memset(g_pdev->hostctrl_p, 0, sizeof(*g_pdev->hostctrl_p));
-    g_pdev->hostctrl_p->is_initialized = false;
+    memset(dev_p->hostctrl_p, 0, sizeof(*dev_p->hostctrl_p));
+    dev_p->hostctrl_p->is_initialized = false;
 
     // assign the PCI device and set up the host controller
-    g_pdev->pci_p = pci;
+    dev_p->pci_p = pci;
 
     // setup bar0
-    g_pdev->hostctrl_p->bar_address = pci_config_readl(g_pdev->pci_p->bdf, 0x10)
+    dev_p->hostctrl_p->bar_address = pci_config_readl(dev_p->pci_p->bdf, 0x10)
             & 0xFFFFFF00;
 
     // check for card detect
-    if (!sd_card_detect(g_pdev)) {
+    if (!sd_card_detect(dev_p)) {
         dprintf(DEBUG_HDL_SD, "No SD card detected\n");
-        free(g_pdev->hostctrl_p);
-        free(g_pdev);
+        free(dev_p->hostctrl_p);
+        free(dev_p);
     }
 
     else {
@@ -222,8 +222,8 @@ static void sd_config_setup(struct pci_device* pci) {
         // initialize bounce buffer
         if (create_bounce_buf() < 0) {
             warn_noalloc();
-            free(g_pdev->hostctrl_p);
-            free(g_pdev);
+            free(dev_p->hostctrl_p);
+            free(dev_p);
         }
     }
 }
@@ -313,7 +313,7 @@ int sd_cmd_data(struct disk_op_s *op, void *cdbcmd, uint16_t blocksize) {
  */
 static int sd_disk_read_aligned(struct disk_op_s* op) {
     int ret = DISK_RET_SUCCESS;
-    sdif_t* sdif_p = GET_GLOBAL( g_pdev );
+    sdif_t *sdif_p = container_of(op->drive_gf, sdif_t, drive);
     uint16_t i = 0;
     uint8_t* cur_position = (uint8_t*) op->buf_fl;
 
