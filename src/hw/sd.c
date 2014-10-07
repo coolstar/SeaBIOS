@@ -566,7 +566,6 @@ static bool sd_send_relative_addr(sdcard_t* card_p) {
     bool status = false;
     sdxfer_t xfer;
     uint32_t tries = SD_TRY_AGAIN;
-    sd_card_state_e current_state = invalid_e;
 
     memset(&xfer, 0, sizeof(sdxfer_t));
     xfer.cmd_idx = MMC_SET_RELATIVE_ADDR_CMD3;
@@ -588,17 +587,7 @@ static bool sd_send_relative_addr(sdcard_t* card_p) {
                 status = false;
                 // here there should probably be a full status check
             }
-
-            // now the card should be in stby mode (this might not be reflected until
-            // the next command (the offset is bit 9 : 12 for state info)
-            current_state = (sd_card_state_e) ((xfer.response[0]
-                    & RCASTATUS_CURRENT_STATE) >> 9);
-            if (current_state == stby_e) {
-                dprintf(DEBUG_HDL_SD,
-                        "SD card: Current state is stby: 0x%02x\n",
-                        current_state);
-                break;
-            }
+            break;
         }
     }
     return status;
