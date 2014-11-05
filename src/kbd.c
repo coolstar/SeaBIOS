@@ -171,7 +171,7 @@ handle_1609(struct bregs *regs)
 static void noinline
 handle_160a(struct bregs *regs)
 {
-    u8 param[2];
+    u8 param[2] = { 0, 0 };
     int ret = kbd_command(ATKBD_CMD_GETID, param);
     if (ret) {
         regs->bx = 0;
