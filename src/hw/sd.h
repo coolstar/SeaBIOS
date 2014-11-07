@@ -146,9 +146,6 @@ typedef struct sdhc_t {
     uint8_t host_spec_ver;
     sdslot_type_e slot_type;
     sdcard_t* card_p;
-
-    // call back to host for sending commands to the card via the host controller interface
-    bool (*sdhc_cmd)(struct sdhc_t* sd_ctrl_p, sdxfer_t* xfer);
 } sdhc_t;
 
 /**

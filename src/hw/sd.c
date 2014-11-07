@@ -94,7 +94,7 @@ bool sd_host_xfer(sdhc_t* host_p, sdxfer_t* xfer_p) {
     dprintf(7, "SD card: Sending CMD%u with arg1 0x%08x\n",
             xfer_p->cmd_idx, xfer_p->arg1);
 
-    status = host_p->sdhc_cmd(host_p, xfer_p);
+    status = sdhc_cmd(host_p, xfer_p);
     if (status) {
         switch (xfer_p->rsp_type) {
         case rsp136_e:

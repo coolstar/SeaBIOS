@@ -68,5 +68,6 @@ bool sdhc_init(sdhc_t* sd_ctrl_p);
 void sdhc_prep_boot(sdhc_t* sd_ctrl_p);
 bool sdhc_is_initialized(sdhc_t* sd_ctrl_p);
 bool sdhc_reset(sdhc_t* sd_ctrl_p, uint8_t reset_flags);
+bool sdhc_cmd(sdhc_t* sdctrl_p, sdxfer_t* xfer_p);
 
 #endif /* __SDHC_GENERIC_H */

@@ -74,9 +74,6 @@ static void sdhc_set_clock(sdhc_t* sd_ctrl_p, uint32_t clk_val);
 static void sdhc_set_power(sdhc_t* sd_ctrl_p, uint32_t pwr_mode);
 static void sdhc_read_block(sdhc_t* sd_ctrl_p, sdxfer_t* xfer_p);
 
-// callback function for performing command/response transactions
-static bool sdhc_cmd(sdhc_t* sd_ctrl_p, sdxfer_t* xfer_p);
-
 /**
  * @brief    sdhc_read_response - Helper function to read different response types
  *              based on a transfer request
@@ -388,7 +385,7 @@ bool sdhc_reset(sdhc_t* sd_ctrl_p, uint8_t reset_flags) {
  *                 card-bus driver
  * @return   bool - True on success, false otherwise
  */
-static bool sdhc_cmd(sdhc_t* sd_ctrl_p, sdxfer_t* xfer_p) {
+bool sdhc_cmd(sdhc_t* sd_ctrl_p, sdxfer_t* xfer_p) {
     uint32_t state_mask = 0;
     uint8_t reg8 = 0;
     uint8_t tmo = 10;
@@ -716,9 +713,6 @@ bool sdhc_init(sdhc_t* sd_ctrl_p) {
 
         reg32 = bar_read32(sd_ctrl_p->bar_address, SDHCI_PRESENT_STATE);
         dprintf(DEBUG_HDL_SD, "SDHC: Present State: 0x%08x\n", reg32);
-
-        // setup the callback(s) for the underlying card bus
-        sd_ctrl_p->sdhc_cmd = &sdhc_cmd;
 
         // setup the cards internal clock to always be normal speed mode to blanket support all card types
         // the SD spec defines normal speed mode as 25MHz, and enumeration as 400KHz
