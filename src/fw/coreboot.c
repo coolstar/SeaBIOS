@@ -420,7 +420,8 @@ coreboot_cbfs_init(void)
     if (!CONFIG_COREBOOT_FLASH)
         return;
 
-    struct cbfs_header *hdr = *(void **)(CONFIG_CBFS_LOCATION - 4);
+    s32 rel_offset = *(s32 *)(CONFIG_CBFS_LOCATION - sizeof(s32));
+    struct cbfs_header *hdr = (void *)(CONFIG_CBFS_LOCATION + rel_offset);
     if (hdr->magic != cpu_to_be32(CBFS_HEADER_MAGIC)) {
         dprintf(1, "Unable to find CBFS (ptr=%p; got %x not %x)\n"
                 , hdr, hdr->magic, cpu_to_be32(CBFS_HEADER_MAGIC));
